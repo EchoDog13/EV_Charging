@@ -1,12 +1,14 @@
 package com.kylebarker.ev_central.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 
 @Entity
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Charger {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Column(nullable = false)
+    private Long uid;
 
     @Column(nullable = false)
     private double pricePerKW;
@@ -24,8 +26,8 @@ public class Charger {
         this.state = state;
     }
 
-    public Long getId() {
-        return id;
+    public Long getUid() {
+        return uid;
     }
 
     public double getPricePerKW() {

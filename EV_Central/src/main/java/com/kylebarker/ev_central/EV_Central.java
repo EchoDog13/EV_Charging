@@ -1,11 +1,14 @@
 package com.kylebarker.ev_central;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.kylebarker.ev_central.model.Charger;
 import com.kylebarker.ev_central.model.chargerState;
 import com.kylebarker.ev_central.repository.ChargerRepository;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ApplicationContext;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.*;
 import java.net.*;
@@ -57,17 +60,23 @@ public class EV_Central {
                 // Create input and output streams
                 BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
                 PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
+            ObjectMapper mapper = new ObjectMapper();
+
+
 
             String line;
             while ((line = in.readLine()) != null) {
-                System.out.println("Received: " + line);
 
-                if (line.startsWith("REGISTER")) {
-                    // Register charger and get response
-                    String response = registerChargerDB(line);
-                    out.println(response);
-                    System.out.println("Registration response: " + response);
-                } else {
+
+                JsonNode node = mapper.readTree(line);
+                if(node.has("function")){
+                    String function = node.get("function").asText();
+                    if (function.equals("register")) {
+                       String result =  registerChargerDB(node);
+                       out.println(result);
+                    }
+                }
+                else {
                     // Echo any other messages
                     out.println("ECHO: " + line);
                 }
@@ -85,32 +94,19 @@ public class EV_Central {
         }
     }
 
-    private static String registerChargerDB(String line) {
+    private static String registerChargerDB(JsonNode node) {
+
+        ObjectMapper mapper = new ObjectMapper();
         try {
-            Charger charger = new Charger();
-            String[] chargerData = line.split(",");
 
-            // Validate input data
-            if (chargerData.length < 4) {
-                return "REGISTER,400,Invalid data format";
-            }
-
-            charger.setLocation(chargerData[1]);
-            charger.setPricePerKW(Double.parseDouble(chargerData[2]));
-            charger.setState(chargerState.valueOf(chargerData[3].toUpperCase()));
-
-            // Save to repository
+            Charger charger = mapper.treeToValue(node, Charger.class);
             Charger savedCharger = chargerRepository.save(charger);
-            return "REGISTER,200,Charger ID: " + savedCharger.getId();
+            return "REGISTER,200,Charger ID: " + savedCharger.getUid();
 
-        } catch (NumberFormatException e) {
-            return "REGISTER,400,Invalid price format";
-        } catch (IllegalArgumentException e) {
-            return "REGISTER,400,Invalid charger state. Valid states: " +
-                    java.util.Arrays.toString(chargerState.values());
-        } catch (Exception e) {
-            e.printStackTrace();
-            return "REGISTER,500,Internal server error";
+        } catch (RuntimeException e) {
+            throw new RuntimeException(e);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
         }
     }
 }

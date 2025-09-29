@@ -3,6 +3,10 @@ package com.kylebarker.ev_cp;
 import picocli.CommandLine;
 import picocli.CommandLine.Option;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -39,7 +43,7 @@ public class EV_CP_M implements Runnable {
     static BufferedReader in = null;
     static PrintWriter out = null;
 
-    static String state = "disconnected";
+    static String state = "DISCONNECTED";
 
     @Override
     public void run() {
@@ -104,7 +108,24 @@ public class EV_CP_M implements Runnable {
             initConnection();
         }
 
-        out.println("REGISTER," + cpLocation + "," + pricePerKW + "," + state);
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode json = mapper.createObjectNode();
+
+        json.put("function", "register");
+        json.put("uid", uid);
+        json.put("pricePerKW", pricePerKW);
+        json.put("location", cpLocation);
+        json.put("state", state);
+        out.println(json.toString());
+
+
+
+
+
+
+
+
+//        out.println("REGISTER," + cpLocation + "," + pricePerKW + "," + state);
 
         try {
             String response = in.readLine();
