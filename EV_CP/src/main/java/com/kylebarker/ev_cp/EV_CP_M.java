@@ -35,8 +35,6 @@ public class EV_CP_M implements Runnable {
     @Option(names = {"-l", "--location"}, description = "Charging point location")
     static String cpLocation;
 
-
-
     static Socket centralSocket = null;
     static BufferedReader in = null;
     static PrintWriter out = null;
