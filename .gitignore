@@ -31,3 +31,22 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Logs & temp ###
+*.log
+*.tmp
+*.swp
+
+### OS junk ###
+.DS_Store
+Thumbs.db
+
+### Java ###
+*.class
+
+### Env files ###
+.env
+
+### Maven wrapper ###
+.mvn/wrapper/*
+!.mvn/wrapper/maven-wrapper.properties
