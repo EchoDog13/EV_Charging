@@ -53,4 +53,14 @@ public class Charger {
     public void setState(chargerState state) {
         this.state = state;
     }
+
+    @Override
+    public String toString() {
+        return "Charger{" +
+                "uid=" + uid +
+                ", pricePerKW=" + pricePerKW +
+                ", location='" + location + '\'' +
+                ", state=" + state +
+                '}';
+    }
 }

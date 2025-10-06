@@ -2,83 +2,131 @@ package com.kylebarker.ev_central;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.kylebarker.ev_central.model.Charger;
 import com.kylebarker.ev_central.model.chargerState;
 import com.kylebarker.ev_central.repository.ChargerRepository;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ApplicationContext;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.stereotype.Component;
+import picocli.CommandLine;
+import picocli.CommandLine.Option;
 
 import java.io.*;
-import java.net.*;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.concurrent.ConcurrentHashMap;
 
 @SpringBootApplication
 public class EV_Central {
 
-    private static ChargerRepository chargerRepository;
-
     public static void main(String[] args) {
-        // Start Spring application context
+        // Parse CLI args with picocli
+        CommandLineArgs cmd = new CommandLineArgs();
+        new CommandLine(cmd).parseArgs(args);
+
+        // Start Spring Boot
         ApplicationContext context = SpringApplication.run(EV_Central.class, args);
 
-        // Get the repository bean from Spring context
-        chargerRepository = context.getBean(ChargerRepository.class);
+        // Start the central server
+        CentralServer server = context.getBean(CentralServer.class);
+        server.start(cmd.port);
+    }
+}
 
-        int port = 5500; // default port
+// Simple POJO for command line arguments
+class CommandLineArgs {
+    @Option(names = {"-p", "--port"},
+            description = "Port for the server to listen on",
+            defaultValue = "5500")
+    public int port;
 
-        // Set port from command line argument
-        if (args.length >= 1) {
-            port = Integer.parseInt(args[0]);
-        }
+    @Option(names = {"-ss", "--setstate"},
+            description = "Set the state of a charging point")
+    public chargerState chargerState;
+}
 
-        // Create server socket
+/**
+ * Socket server that handles charger connections
+ */
+@Component
+class CentralServer {
+
+    private final ChargerRepository chargerRepository;
+    private final ConcurrentHashMap<Long, Socket> chargerSockets = new ConcurrentHashMap<>();
+    private final ObjectMapper mapper = new ObjectMapper();
+
+    public CentralServer(ChargerRepository chargerRepository) {
+        this.chargerRepository = chargerRepository;
+    }
+
+    public void start(int port) {
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.println("Central server listening on port " + port);
 
-            // Continuously accept client connections
             while (true) {
                 Socket clientSocket = serverSocket.accept();
                 System.out.println("Client connected: " + clientSocket.getInetAddress());
 
-                // Handle client in a new thread
                 new Thread(() -> handleClient(clientSocket)).start();
             }
 
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new RuntimeException("Failed to start server on port " + port, e);
         }
     }
 
-    /**
-     * Handles communication with a connected client.
-     *
-     * @param clientSocket The socket connected to the client.
-     */
-    private static void handleClient(Socket clientSocket) {
+    private void handleClient(Socket clientSocket) {
         try (
-                // Create input and output streams
                 BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-                PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
-            ObjectMapper mapper = new ObjectMapper();
-
-
-
+                PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)
+        ) {
             String line;
             while ((line = in.readLine()) != null) {
+                System.out.println("Received: " + line); // Debug logging
 
+                String function = null;
+                try {
+                    JsonNode node = mapper.readTree(line);
 
-                JsonNode node = mapper.readTree(line);
-                if(node.has("function")){
-                    String function = node.get("function").asText();
-                    if (function.equals("register")) {
-                       String result =  registerChargerDB(node);
-                       out.println(result);
+                    if (node.has("function")){
+                        function = node.get("function").asText();
                     }
-                }
-                else {
-                    // Echo any other messages
-                    out.println("ECHO: " + line);
+
+                        if (function.equals("register")) {
+                            Charger charger = registerChargerDB(node);
+                            chargerSockets.put(charger.getUid(), clientSocket);
+
+                            // Send proper JSON response
+                            sendSuccessResponse(out,"register", "Charger registered successfully", charger);
+                        }
+
+                        else if (function.equals("healthcheck")) {
+                           chargerState state = chargerState.valueOf(node.get("state").asText());
+                           Long uid = Long.parseLong(node.get("uid").asText());
+
+//                         Charger charger =  chargerRepository.findById(uid);
+                            Charger charger = chargerRepository.findById(uid).orElseThrow();
+                           charger.setState(state);
+                           chargerRepository.save(charger);
+
+
+
+
+
+                    } else {
+                        // If no function field, send error response
+                        sendErrorResponse(out, "Missing 'function' field in request");
+                    }
+
+                } catch (JsonProcessingException e) {
+                    // Handle JSON parsing errors
+                    sendErrorResponse(out, "Invalid JSON format: " + e.getMessage());
+                } catch (Exception e) {
+                    // Handle other exceptions
+                    sendErrorResponse(out, "Server error: " + e.getMessage());
                 }
             }
 
@@ -94,19 +142,93 @@ public class EV_Central {
         }
     }
 
-    private static String registerChargerDB(JsonNode node) {
-
-        ObjectMapper mapper = new ObjectMapper();
+    private Charger registerChargerDB(JsonNode node) {
         try {
-
             Charger charger = mapper.treeToValue(node, Charger.class);
-            Charger savedCharger = chargerRepository.save(charger);
-            return "REGISTER,200,Charger ID: " + savedCharger.getUid();
 
-        } catch (RuntimeException e) {
-            throw new RuntimeException(e);
+            // Fixed the logic - check if UID is NOT null and already exists
+            if ((charger.getUid() != null) && chargerRepository.findById(charger.getUid()).isPresent()) {
+                throw new RuntimeException("Charger with id " + charger.getUid() + " already exists.");
+            }
+
+            Charger savedCharger = chargerRepository.save(charger);
+            System.out.println("Charger registered in database: " + savedCharger.getUid());
+            return savedCharger;
+
         } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException("Failed to register charger", e);
+        }
+    }
+
+    /**
+     * Send a success response with charger data
+     */
+    private void sendSuccessResponse(PrintWriter out, String function, String message, Charger charger) {
+        try {
+            ObjectNode response = mapper.createObjectNode();
+            response.put("function", function);
+            response.put("status", "success");
+            response.put("message", message);
+            response.put("timestamp", System.currentTimeMillis());
+
+            // Convert charger object to JSON and add to response
+            ObjectNode chargerJson = mapper.valueToTree(charger);
+            response.set("charger", chargerJson);
+
+            String jsonResponse = response.toString();
+            System.out.println("Sending success response: " + jsonResponse);
+            out.println(jsonResponse);
+
+        } catch (Exception e) {
+            System.err.println("Error creating success response: " + e.getMessage());
+            sendErrorResponse(out, "Failed to create response");
+        }
+    }
+
+    /**
+     * Send an error response
+     */
+    private void sendErrorResponse(PrintWriter out, String errorMessage) {
+        try {
+            ObjectNode response = mapper.createObjectNode();
+            response.put("status", "error");
+            response.put("message", errorMessage);
+            response.put("timestamp", System.currentTimeMillis());
+
+            String jsonResponse = response.toString();
+            System.out.println("Sending error response: " + jsonResponse);
+            out.println(jsonResponse);
+
+        } catch (Exception e) {
+            System.err.println("Error creating error response: " + e.getMessage());
+            // Fallback plain text response
+            out.println("{\"status\":\"error\",\"message\":\"Critical server error\"}");
+        }
+    }
+
+
+
+    public void setCPState(long chargerUID, chargerState state) {
+        try {
+            Charger charger = chargerRepository.findById(chargerUID)
+                    .orElseThrow(() -> new RuntimeException("Charger not found: " + chargerUID));
+
+            ObjectNode jsonNode = mapper.createObjectNode();
+            jsonNode.put("function", "setCPState");
+            jsonNode.put("charger", charger.getUid());
+            jsonNode.put("state", state.toString());
+
+            Socket chargerSocket = chargerSockets.get(charger.getUid());
+            if (chargerSocket != null && !chargerSocket.isClosed()) {
+                PrintWriter out = new PrintWriter(chargerSocket.getOutputStream(), true);
+                out.println(jsonNode.toString());
+                System.out.println("Sent setCPState command to charger " + charger.getUid());
+            } else {
+                System.err.println("Charger socket not found or closed for UID: " + charger.getUid());
+            }
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to set CP state for charger " + chargerUID, e);
         }
     }
 }
