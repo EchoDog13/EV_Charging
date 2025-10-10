@@ -63,10 +63,38 @@ class CentralServer {
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.println("Central server listening on port " + port);
 
+            // --- Background thread to monitor health checks ---
+            new Thread(() -> {
+                while (true) {
+                    try {
+                        long now = System.currentTimeMillis();
+
+                        // Iterate over all chargers in the database
+                        for (Charger charger : chargerRepository.findAll()) {
+                            Long lastSeen = charger.getLastHealthCheck();
+                            if (lastSeen == null || now - lastSeen > 5000) { // 5 second timeout
+                                if (charger.getState() != chargerState.DISCONNECTED) {
+                                    charger.setState(chargerState.DISCONNECTED);
+                                    chargerRepository.save(charger);
+                                    System.out.println("Charger " + charger.getUid()
+                                            + " marked as DISCONNECTED due to missing health check.");
+                                }
+                            }
+                        }
+
+                        Thread.sleep(1000); // check every 1 second
+                    } catch (InterruptedException e) {
+                        break; // exit thread if interrupted
+                    }
+                }
+            }).start();
+
+            // --- Main server loop for handling clients ---
             while (true) {
                 Socket clientSocket = serverSocket.accept();
                 System.out.println("Client connected: " + clientSocket.getInetAddress());
 
+                // Handle each client in a separate thread
                 new Thread(() -> handleClient(clientSocket)).start();
             }
 
@@ -106,6 +134,7 @@ class CentralServer {
                         // Charger charger = chargerRepository.findById(uid);
                         Charger charger = chargerRepository.findById(uid).orElseThrow();
                         charger.setState(state);
+                        charger.setLastHealthCheck(System.currentTimeMillis());
                         chargerRepository.save(charger);
 
                     } else {

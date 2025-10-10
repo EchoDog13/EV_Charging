@@ -18,7 +18,10 @@ public class Charger {
     @Enumerated(EnumType.STRING)
     private chargerState state;
 
-    public Charger(){};
+    private Long lastHealthCheck;
+
+    public Charger() {
+    };
 
     public Charger(double pricePerKW, String location, chargerState state) {
         this.pricePerKW = pricePerKW;
@@ -52,6 +55,14 @@ public class Charger {
 
     public void setState(chargerState state) {
         this.state = state;
+    }
+
+    public Long getLastHealthCheck() {
+        return lastHealthCheck;
+    }
+
+    public void setLastHealthCheck(Long lastHealthCheck) {
+        this.lastHealthCheck = lastHealthCheck;
     }
 
     @Override
