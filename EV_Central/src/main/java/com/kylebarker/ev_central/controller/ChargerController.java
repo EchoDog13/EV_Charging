@@ -4,12 +4,11 @@ import com.kylebarker.ev_central.model.Charger;
 import com.kylebarker.ev_central.repository.ChargerRepository;
 import org.springframework.web.bind.annotation.*;
 
-
 import jakarta.validation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/chargers")
+@RequestMapping("/api/central")
 public class ChargerController {
 
     private final ChargerRepository repository;
@@ -18,7 +17,7 @@ public class ChargerController {
         this.repository = repository;
     }
 
-    @GetMapping
+    @GetMapping("/cps")
     public List<Charger> getAllChargers() {
         return repository.findAll();
     }
