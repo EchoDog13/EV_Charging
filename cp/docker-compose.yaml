@@ -1,0 +1,29 @@
+services:
+  ev_cp_m:
+    build:
+      context: ./ev_cp_m
+      dockerfile: Dockerfile
+    container_name: ev_cp_m
+    ports:
+      - "8081:8080"   # maps container port 8080 → host port 8081
+    environment:
+      - SPRING_PROFILES_ACTIVE=default
+    networks:
+      - ev_network
+    depends_on:
+      - ev_cp_e
+
+  ev_cp_e:
+    build:
+      context: ./ev_cp_e
+      dockerfile: dockerfile    # note lowercase if your file is named exactly "dockerfile"
+    container_name: ev_cp_e
+    ports:
+      - "8082:8080"
+    networks:
+      - ev_network
+
+networks:
+  ev_network:
+    driver: bridge
+    external: true  # So this can connect to other Docker Compose projects (like Driver, Central, etc.)
