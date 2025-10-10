@@ -15,28 +15,28 @@ import java.net.Socket;
 
 public class EV_CP_M implements Runnable {
 
-    @Option(names = {"-cp", "--central-port"}, description = "Central server port", required = true)
+    @Option(names = { "-cp", "--central-port" }, description = "Central server port", required = true)
     Integer centralPort;
 
-    @Option(names = {"-ci", "--central-ip"}, description = "Central server IP or hostname", required = true)
+    @Option(names = { "-ci", "--central-ip" }, description = "Central server IP or hostname", required = true)
     String centralIP;
 
-    @Option(names = {"-ep", "--engine-port"}, description = "Port of the engine")
+    @Option(names = { "-ep", "--engine-port" }, description = "Port of the engine")
     Integer enginePort;
 
-    @Option(names = {"-ei", "--engine-ip"}, description = "Engine IP or hostname")
+    @Option(names = { "-ei", "--engine-ip" }, description = "Engine IP or hostname")
     String engineIP;
 
-    @Option(names = {"-u", "--uid"}, description = "Unique Identifier of charge point")
+    @Option(names = { "-u", "--uid" }, description = "Unique Identifier of charge point")
     int uid;
 
-    @Option(names = {"-c", "--cost"}, description = "Price per KW (default: ${DEFAULT-VALUE})")
+    @Option(names = { "-c", "--cost" }, description = "Price per KW (default: ${DEFAULT-VALUE})")
     double pricePerKW = 10;
 
-    @Option(names = {"-r", "--register"}, description = "Register with the central server")
+    @Option(names = { "-r", "--register" }, description = "Register with the central server")
     boolean registerFlag = false;
 
-    @Option(names = {"-l", "--location"}, description = "Charging point location")
+    @Option(names = { "-l", "--location" }, description = "Charging point location")
     String cpLocation;
 
     Socket centralSocket = null;
@@ -51,14 +51,15 @@ public class EV_CP_M implements Runnable {
     @Override
     public void run() {
         // Print parsed configuration
-//
+        //
 
         // Initialize a socket connection with the central server
         initConnection();
 
         if (registerFlag) {
             // Check that all the required arguments are given for registration
-            if ((centralIP != null) && (!centralIP.isEmpty()) && (centralPort > 0) && enginePort > 0 && engineIP != null && !engineIP.isEmpty()) {
+            if ((centralIP != null) && (!centralIP.isEmpty()) && (centralPort > 0) && enginePort > 0 && engineIP != null
+                    && !engineIP.isEmpty()) {
                 register();
             }
         }
@@ -75,7 +76,8 @@ public class EV_CP_M implements Runnable {
         } finally {
             stopHealthCheck();
             try {
-                if (centralSocket != null) centralSocket.close();
+                if (centralSocket != null)
+                    centralSocket.close();
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -105,12 +107,12 @@ public class EV_CP_M implements Runnable {
     public void register() {
         System.out.println("Registering with central server at " + centralIP + ":" + centralPort);
 
-        //Establish connection with central server
+        // Establish connection with central server
         if (centralSocket == null) {
             initConnection();
         }
 
-        //Create JSON register request
+        // Create JSON register request
         ObjectMapper mapper = new ObjectMapper();
         ObjectNode json = mapper.createObjectNode();
 
@@ -120,7 +122,7 @@ public class EV_CP_M implements Runnable {
         json.put("location", cpLocation);
         json.put("state", state);
 
-        //Send request
+        // Send request
         out.println(json.toString());
 
         // Await response
@@ -139,6 +141,10 @@ public class EV_CP_M implements Runnable {
                     System.out.println("Registration successful! Starting health checks...");
                     state = "ACTIVATED";
                     startHealthCheck();
+                }
+
+                else if (status.equals("error") && function.equals("register")) {
+                    System.exit(1);
                 }
             }
 

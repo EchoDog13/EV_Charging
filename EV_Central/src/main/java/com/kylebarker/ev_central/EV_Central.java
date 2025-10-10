@@ -38,13 +38,10 @@ public class EV_Central {
 
 // Simple POJO for command line arguments
 class CommandLineArgs {
-    @Option(names = {"-p", "--port"},
-            description = "Port for the server to listen on",
-            defaultValue = "5500")
+    @Option(names = { "-p", "--port" }, description = "Port for the server to listen on", defaultValue = "5500")
     public int port;
 
-    @Option(names = {"-ss", "--setstate"},
-            description = "Set the state of a charging point")
+    @Option(names = { "-ss", "--setstate" }, description = "Set the state of a charging point")
     public chargerState chargerState;
 }
 
@@ -81,8 +78,7 @@ class CentralServer {
     private void handleClient(Socket clientSocket) {
         try (
                 BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-                PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)
-        ) {
+                PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
             String line;
             while ((line = in.readLine()) != null) {
                 System.out.println("Received: " + line); // Debug logging
@@ -91,42 +87,38 @@ class CentralServer {
                 try {
                     JsonNode node = mapper.readTree(line);
 
-                    if (node.has("function")){
+                    if (node.has("function")) {
                         function = node.get("function").asText();
                     }
 
-                        if (function.equals("register")) {
-                            Charger charger = registerChargerDB(node);
-                            chargerSockets.put(charger.getUid(), clientSocket);
+                    if (function.equals("register")) {
+                        Charger charger = registerChargerDB(node);
+                        chargerSockets.put(charger.getUid(), clientSocket);
 
-                            // Send proper JSON response
-                            sendSuccessResponse(out,"register", "Charger registered successfully", charger);
-                        }
+                        // Send proper JSON response
+                        sendSuccessResponse(out, "register", "Charger registered successfully", charger);
+                    }
 
-                        else if (function.equals("healthcheck")) {
-                           chargerState state = chargerState.valueOf(node.get("state").asText());
-                           Long uid = Long.parseLong(node.get("uid").asText());
+                    else if (function.equals("healthcheck")) {
+                        chargerState state = chargerState.valueOf(node.get("state").asText());
+                        Long uid = Long.parseLong(node.get("uid").asText());
 
-//                         Charger charger =  chargerRepository.findById(uid);
-                            Charger charger = chargerRepository.findById(uid).orElseThrow();
-                           charger.setState(state);
-                           chargerRepository.save(charger);
-
-
-
-
+                        // Charger charger = chargerRepository.findById(uid);
+                        Charger charger = chargerRepository.findById(uid).orElseThrow();
+                        charger.setState(state);
+                        chargerRepository.save(charger);
 
                     } else {
                         // If no function field, send error response
-                        sendErrorResponse(out, "Missing 'function' field in request");
+                        sendErrorResponse(out, "Missing 'function' field in request", function);
                     }
 
                 } catch (JsonProcessingException e) {
                     // Handle JSON parsing errors
-                    sendErrorResponse(out, "Invalid JSON format: " + e.getMessage());
+                    sendErrorResponse(out, "Invalid JSON format: " + e.getMessage(), function);
                 } catch (Exception e) {
                     // Handle other exceptions
-                    sendErrorResponse(out, "Server error: " + e.getMessage());
+                    sendErrorResponse(out, "Server error: " + e.getMessage(), function);
                 }
             }
 
@@ -181,16 +173,17 @@ class CentralServer {
 
         } catch (Exception e) {
             System.err.println("Error creating success response: " + e.getMessage());
-            sendErrorResponse(out, "Failed to create response");
+            sendErrorResponse(out, "Failed to create response", function);
         }
     }
 
     /**
      * Send an error response
      */
-    private void sendErrorResponse(PrintWriter out, String errorMessage) {
+    private void sendErrorResponse(PrintWriter out, String errorMessage, String function) {
         try {
             ObjectNode response = mapper.createObjectNode();
+            response.put("function", function);
             response.put("status", "error");
             response.put("message", errorMessage);
             response.put("timestamp", System.currentTimeMillis());
@@ -205,8 +198,6 @@ class CentralServer {
             out.println("{\"status\":\"error\",\"message\":\"Critical server error\"}");
         }
     }
-
-
 
     public void setCPState(long chargerUID, chargerState state) {
         try {
