@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.kylebarker.ev_central.model.Charger;
 import com.kylebarker.ev_central.model.chargerState;
 import com.kylebarker.ev_central.repository.ChargerRepository;
+import com.kylebarker.ev_central.repository.KafkaSender;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ApplicationContext;
@@ -18,6 +19,17 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.ConcurrentHashMap;
+
+
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.annotation.KafkaListener;
+
 
 @SpringBootApplication
 public class EV_Central {
@@ -54,14 +66,19 @@ class CentralServer {
     private final ChargerRepository chargerRepository;
     private final ConcurrentHashMap<Long, Socket> chargerSockets = new ConcurrentHashMap<>();
     private final ObjectMapper mapper = new ObjectMapper();
+    private final KafkaSender kafkaSender; 
 
-    public CentralServer(ChargerRepository chargerRepository) {
+    public CentralServer(ChargerRepository chargerRepository, KafkaSender kafkaSender) {
         this.chargerRepository = chargerRepository;
+        this.kafkaSender = kafkaSender;
     }
 
     public void start(int port) {
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.println("Central server listening on port " + port);
+
+            kafkaSender.send("central_startup", "Central server started on port " + port);
+        
 
             // --- Background thread to monitor health checks ---
             new Thread(() -> {
@@ -163,6 +180,8 @@ class CentralServer {
         }
     }
 
+
+
     private Charger registerChargerDB(JsonNode node) {
         try {
             Charger charger = mapper.treeToValue(node, Charger.class);
@@ -251,4 +270,5 @@ class CentralServer {
             throw new RuntimeException("Failed to set CP state for charger " + chargerUID, e);
         }
     }
+
 }
