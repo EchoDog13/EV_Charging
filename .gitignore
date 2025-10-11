@@ -50,3 +50,4 @@ Thumbs.db
 ### Maven wrapper ###
 .mvn/wrapper/*
 !.mvn/wrapper/maven-wrapper.properties
+plan.txt

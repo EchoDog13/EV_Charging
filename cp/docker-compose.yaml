@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: ev_cp_m
     ports:
-      - "8081:8080"   # maps container port 8080 → host port 8081
+      - "8010:8080"   # maps container port 8080 → host port 8081
     environment:
       - SPRING_PROFILES_ACTIVE=default
     networks:
