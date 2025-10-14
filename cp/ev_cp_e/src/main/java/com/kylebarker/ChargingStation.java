@@ -18,6 +18,7 @@ public class ChargingStation implements CommandLineRunner {
     public void run(String... args) throws Exception {
         // This runs after Spring Boot starts
         connectMonitor();
+
     }
 
     private void connectMonitor() {
