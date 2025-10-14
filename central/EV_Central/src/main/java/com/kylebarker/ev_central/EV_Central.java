@@ -8,6 +8,9 @@ import com.kylebarker.ev_central.model.Charger;
 import com.kylebarker.ev_central.model.chargerState;
 import com.kylebarker.ev_central.repository.ChargerRepository;
 import com.kylebarker.ev_central.repository.KafkaSender;
+
+import jakarta.persistence.criteria.CriteriaBuilder.In;
+
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ApplicationContext;
@@ -16,11 +19,11 @@ import picocli.CommandLine;
 import picocli.CommandLine.Option;
 
 import java.io.*;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.ConcurrentHashMap;
 
-
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,7 +32,6 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.annotation.KafkaListener;
-
 
 @SpringBootApplication
 public class EV_Central {
@@ -66,7 +68,7 @@ class CentralServer {
     private final ChargerRepository chargerRepository;
     private final ConcurrentHashMap<Long, Socket> chargerSockets = new ConcurrentHashMap<>();
     private final ObjectMapper mapper = new ObjectMapper();
-    private final KafkaSender kafkaSender; 
+    private final KafkaSender kafkaSender;
 
     public CentralServer(ChargerRepository chargerRepository, KafkaSender kafkaSender) {
         this.chargerRepository = chargerRepository;
@@ -74,11 +76,10 @@ class CentralServer {
     }
 
     public void start(int port) {
-        try (ServerSocket serverSocket = new ServerSocket(port)) {
+        try (ServerSocket serverSocket = new ServerSocket(port, 0, InetAddress.getByName("0.0.0.0"))) {
             System.out.println("Central server listening on port " + port);
 
             kafkaSender.send("central_startup", "Central server started on port " + port);
-        
 
             // --- Background thread to monitor health checks ---
             new Thread(() -> {
@@ -179,8 +180,6 @@ class CentralServer {
             }
         }
     }
-
-
 
     private Charger registerChargerDB(JsonNode node) {
         try {

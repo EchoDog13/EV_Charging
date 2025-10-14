@@ -6,35 +6,14 @@ services:
     build: ./EV_Central
     container_name: ev-central
     ports:
-      - "8080:8080"
+      - "8081:8080"
       - "5500:5500"
     environment:
       # Connect to local Kafka on your Mac
-      KAFKA_BOOTSTRAP_SERVERS: host.docker.internal:9094
+      KAFKA_BOOTSTRAP_SERVERS: 192.168.100.10:9092
     networks:
-      - ev_network
-
-
-  # ev_cp:
-  #   build: ./EV_CP
-  #   container_name: ev-cp-service
-  #   ports:
-  #     - "30000:30000"
-  #   environment:
-  #     CENTRAL_HOST: ev_central
-  #     CENTRAL_PORT: 5500
-  #     DB_HOST: ev_db
-  #     DB_PORT: 3306
-  #     DB_NAME: ev_database
-  #     DB_USER: ev_user
-  #     DB_PASSWORD: ev_password
-  #     # Connect to local Kafka on your Mac
-  #     KAFKA_BOOTSTRAP_SERVERS: host.docker.internal:9092
-  #   depends_on:
-  #     ev_db:
-  #       condition: service_healthy
-  #   networks:
-  #     - ev_network
+      alicante:
+        ipv4_address: 192.168.100.100
 
   # --------------------------------------------------------------------
   # Database & Admin Tool
@@ -49,23 +28,24 @@ services:
       MYSQL_USER: ev_user
       MYSQL_PASSWORD: ev_password
     ports:
-      - "3309:3306"
+      - "3307:3306"
     volumes:
       - ev_db_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "192.168.100.102", "-u", "root", "-prootpassword"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
     networks:
-      - ev_network
+      alicante:
+        ipv4_address: 192.168.100.101  # Static IP for the database - same as central
 
   phpmyadmin:
     image: phpmyadmin:latest
     container_name: ev-phpmyadmin
     ports:
-      - "8081:80"
+      - "8060:80"
     environment:
       PMA_HOST: ev_db
       PMA_USER: root
@@ -74,14 +54,15 @@ services:
       ev_db:
         condition: service_healthy
     networks:
-      - ev_network
+      alicante:
+        ipv4_address: 192.168.100.102  # Static IP for phpMyAdmin - same as central
 
 # --------------------------------------------------------------------
 # Networks and Volumes
 # --------------------------------------------------------------------
 networks:
-  ev_network:
-    external: true  # So this can connect to other Docker Compose projects (like Driver, CP, etc.)
+  alicante:
+    external: true # So this can connect to other Docker Compose projects (like Driver, CP, etc.)
 
 volumes:
   ev_db_data:

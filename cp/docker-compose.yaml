@@ -1,29 +1,39 @@
-services:
-  ev_cp_m:
-    build:
-      context: ./ev_cp_m
-      dockerfile: Dockerfile
-    container_name: ev_cp_m
-    ports:
-      - "8010:8080"   # maps container port 8080 → host port 8081
-    environment:
-      - SPRING_PROFILES_ACTIVE=default
-    networks:
-      - ev_network
-    depends_on:
-      - ev_cp_e
-
-  ev_cp_e:
-    build:
-      context: ./ev_cp_e
-      dockerfile: dockerfile    # note lowercase if your file is named exactly "dockerfile"
-    container_name: ev_cp_e
-    ports:
-      - "8082:8080"
-    networks:
-      - ev_network
+version: "3.9"
 
 networks:
-  ev_network:
-    driver: bridge
-    external: true  # So this can connect to other Docker Compose projects (like Driver, Central, etc.)
+  alicante:
+    external: true
+
+services:
+  monitor:
+    build: ./ev_cp_m
+    image: ev_cp_m:latest
+    networks:
+      alicante:
+        ipv4_address: 192.168.100.30
+    ports:
+      - "5050:5050"   # optional; internal communication doesn't need this
+    command: "${MONITOR_COMMAND}"
+    deploy:
+      replicas: 1
+
+  engine:
+    build: ./ev_cp_e
+    image: ev_engine:latest
+    networks:
+      alicante:
+        ipv4_address: 192.168.100.31
+    environment:
+      - MONITOR_HOST=monitor
+      - MONITOR_PORT=5050
+      - UID=${COMPOSE_PROJECT_NAME}
+    command: >
+      sh -c "
+      echo 'Waiting for monitor to start...' &&
+      sleep 7 &&
+      java -jar app.jar
+      "
+    depends_on:
+      - monitor
+    deploy:
+      replicas: 1

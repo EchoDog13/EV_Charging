@@ -6,9 +6,9 @@ set -e  # Exit immediately if a command exits with a non-zero status
 
 echo "=== Cleaning and packaging project with Maven ==="
 ./mvnw clean package -DskipTests -e
-echo "=== Recreating Docker network ==="
-docker network rm ev_network 2>/dev/null || true
-docker network create ev_network
+# echo "=== Recreating Docker network ==="
+# docker network rm ev_network 2>/dev/null || true
+# docker network create ev_network
 cd central
 
 echo "=== Stopping running Docker containers ==="
