@@ -24,7 +24,7 @@ It must be run giving the parameters required to start a Charger
 
 eg:
 
-./start.sh set1212 "-ci 192.168.1.100 -cp 5500 -ei 192.168.100.30 -ep 5050 -l alicante -u 12345 -r"
+./start.sh set1212 "-ci 192.168.100.100 -cp 5500 -ei 192.168.100.30 -ep 5050 -l alicante -u 12345 -r"
 
 
 

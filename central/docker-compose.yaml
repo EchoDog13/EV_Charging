@@ -33,7 +33,7 @@ services:
     volumes:
       - ev_db_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "192.168.100.102", "-u", "root", "-prootpassword"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-prootpassword"]
       interval: 10s
       timeout: 5s
       retries: 5
