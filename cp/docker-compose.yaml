@@ -28,11 +28,14 @@ services:
       - MONITOR_PORT=5050
       - UID=${COMPOSE_PROJECT_NAME}
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=192.168.100.10:9092
+      # Local charger id for this engine instance. You MUST set CHARGER_ID in the environment
+      # or an .env file when running docker-compose (no default provided to force explicit config).
+      - CHARGER_ID=${CHARGER_ID}
     command: >
       sh -c "
       echo 'Waiting for monitor to start...' &&
       sleep 7 &&
-      java -jar app.jar
+      java -Dcharger.id=$CHARGER_ID -jar app.jar
       "
     depends_on:
       - monitor

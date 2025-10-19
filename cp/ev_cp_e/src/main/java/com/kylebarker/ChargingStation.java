@@ -1,108 +1,122 @@
 package com.kylebarker;
 
-import org.springframework.boot.CommandLineRunner;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import java.io.*;
-import java.net.Socket;
-import org.json.JSONObject;
+
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
+import java.util.Random;
+import java.util.Timer;
+import java.util.TimerTask;
 
 @Component
-public class ChargingStation implements CommandLineRunner {
+public class ChargingStation {
+    private final Map<String, ChargingSession> activeSessions = new ConcurrentHashMap<>();
+    private final Timer energyUpdater = new Timer(true);
 
-    public static String chargerId;
-    public static PrintWriter writer;
-    public static BufferedReader reader;
-    public static String status = "OK";
+    private final String chargerId;
 
-    @Override
-    public void run(String... args) throws Exception {
-        // This runs after Spring Boot starts
-        connectMonitor();
-
+    private String generateChargerId() {
+        Random random = new Random();
+        // Example: CHG-1000 to CHG-9999
+        int number = 1000 + random.nextInt(9000);
+        return "CHG-" + number;
     }
 
-    private void connectMonitor() {
-        String hostname = "host.docker.internal";
-        int port = 5050;
+    public String getChargerId() {
+        return chargerId;
+    }
 
-        try (Socket socket = new Socket(hostname, port);
-                BufferedReader localReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                PrintWriter localWriter = new PrintWriter(socket.getOutputStream(), true)) {
-
-            reader = localReader;
-            writer = localWriter;
-            startHealthCheck();
-            System.out.println("Connected to EV_CP_M at " + hostname + ":" + port);
-
-            String line;
-            while ((line = reader.readLine()) != null) {
-                try {
-                    JSONObject json = new JSONObject(line);
-                    String command = json.getString("command");
-
-                    switch (command) {
-                        case "CONNECT_MONITOR":
-                            startHealthCheck();
-                            break;
-                        case "STOP_CHARGING":
-                            chargerId = json.getString("chargerId");
-                            stopCharging(chargerId);
-                            break;
-                        case "STATUS_UPDATE":
-                            handleStatusUpdate(json);
-                            break;
-                        default:
-                            System.out.println("Unknown command: " + command);
-                    }
-                } catch (Exception e) {
-                    System.err.println("Invalid JSON received: " + line);
-                }
-            }
-        } catch (Exception e) {
-            System.err.println("Failed to connect to EV_CP_M: " + e.getMessage());
+    // Accept charger.id from configuration (property or JVM arg). If not provided,
+    // fall back to random.
+    public ChargingStation(@Value("${charger.id:}") String configuredChargerId) {
+        if (configuredChargerId != null && !configuredChargerId.isBlank()) {
+            this.chargerId = configuredChargerId;
+        } else {
+            this.chargerId = generateChargerId();
         }
-    }
 
-    private void startHealthCheck() {
-        System.out.println("Starting health check...");
-        Thread healthCheckThread = new Thread(() -> {
-            while (true) {
-                try {
-                    Thread.sleep(10000);
-                    sendHealthCheck(status);
-                } catch (InterruptedException e) {
-                    System.err.println("Health check thread interrupted: " + e.getMessage());
-                    break;
-                }
+        System.out.println("Charging Station started with ID: " + chargerId);
+
+        energyUpdater.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                activeSessions.values().forEach(ChargingSession::updateEnergy);
             }
-        });
-        healthCheckThread.start();
+        }, 0, 1000);
     }
 
-    private void startCharging(String chargerId) {
-        System.out.println("Starting charging on: " + chargerId);
-    }
-
-    private void stopCharging(String chargerId) {
-        System.out.println("Stopping charging on: " + chargerId);
-    }
-
-    private void handleStatusUpdate(JSONObject json) {
-        System.out.println("Status update: " + json.toString());
-    }
-
-    private void sendHealthCheck(String status) {
-        try {
-            JSONObject json = new JSONObject();
-            json.put("function", "healthcheck");
-            json.put("chargerId", chargerId);
-            json.put("state", status);
-            json.put("timestamp", System.currentTimeMillis());
-
-            writer.println(json.toString());
-            System.out.println("Health check sent: " + json.toString());
-        } catch (Exception e) {
-            System.err.println("Failed to send health check: " + e.getMessage());
+    public String startSession(String chargerId, String driverId) {
+        ChargingSession existing = activeSessions.get(chargerId);
+        if (existing != null) {
+            if (existing.getStatus().equals("PAUSED")) {
+                existing.resume();
+                return "Resumed paused session on charger " + chargerId;
+            }
+            return "Charger " + chargerId + " is already in use!";
         }
+
+        ChargingSession session = new ChargingSession(chargerId, driverId);
+        activeSessions.put(chargerId, session);
+        return "Created new session (waiting for plug): " + session.getSessionId();
+    }
+
+    public String stopSession(String chargerId) {
+        ChargingSession session = activeSessions.get(chargerId);
+        if (session == null)
+            return "No active session on charger " + chargerId;
+        session.end();
+        activeSessions.remove(chargerId);
+        return "Session stopped: " + session.getSessionId();
+    }
+
+    public String plugIn(String chargerId) {
+        ChargingSession session = activeSessions.get(chargerId);
+        if (session == null)
+            return "No session on charger " + chargerId;
+        session.plugIn();
+        return "Charger " + chargerId + " plugged in. Session is now " + session.getStatus();
+    }
+
+    public String unplug(String chargerId) {
+        ChargingSession session = activeSessions.get(chargerId);
+        if (session == null)
+            return "No session on charger " + chargerId;
+        session.unplug();
+        return "Charger " + chargerId + " unplugged. Session is now " + session.getStatus();
+    }
+
+    public String pause(String chargerId) {
+        ChargingSession session = activeSessions.get(chargerId);
+        if (session == null)
+            return "No session on charger " + chargerId;
+        session.pause();
+        return "Paused session on charger " + chargerId;
+    }
+
+    public String resume(String chargerId) {
+        ChargingSession session = activeSessions.get(chargerId);
+        if (session == null)
+            return "No session on charger " + chargerId;
+        session.resume();
+        return "Resumed session on charger " + chargerId;
+    }
+
+    public String pauseAll() {
+        activeSessions.values().forEach(ChargingSession::pause);
+        return "All sessions paused.";
+    }
+
+    public String resumeAll() {
+        activeSessions.values().forEach(ChargingSession::resume);
+        return "All sessions resumed.";
+    }
+
+    public String status(String chargerId) {
+        ChargingSession session = activeSessions.get(chargerId);
+        if (session == null)
+            return "No session on charger " + chargerId;
+        session.printStatus();
+        return "Status printed for charger " + chargerId;
     }
 }
