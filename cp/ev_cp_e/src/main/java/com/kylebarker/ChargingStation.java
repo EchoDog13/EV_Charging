@@ -11,14 +11,15 @@ import java.util.TimerTask;
 
 @Component
 public class ChargingStation {
-    private final Map<String, ChargingSession> activeSessions = new ConcurrentHashMap<>();
+
+    private final Map<String, ChargingSession> activeSessionsByCharger = new ConcurrentHashMap<>();
+    private final Map<String, ChargingSession> activeSessionsById = new ConcurrentHashMap<>();
     private final Timer energyUpdater = new Timer(true);
 
     private final String chargerId;
 
     private String generateChargerId() {
         Random random = new Random();
-        // Example: CHG-1000 to CHG-9999
         int number = 1000 + random.nextInt(9000);
         return "CHG-" + number;
     }
@@ -27,8 +28,6 @@ public class ChargingStation {
         return chargerId;
     }
 
-    // Accept charger.id from configuration (property or JVM arg). If not provided,
-    // fall back to random.
     public ChargingStation(@Value("${charger.id:}") String configuredChargerId) {
         if (configuredChargerId != null && !configuredChargerId.isBlank()) {
             this.chargerId = configuredChargerId;
@@ -41,13 +40,20 @@ public class ChargingStation {
         energyUpdater.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
-                activeSessions.values().forEach(ChargingSession::updateEnergy);
+                activeSessionsByCharger.values().forEach(ChargingSession::updateEnergy);
             }
         }, 0, 1000);
     }
 
+    // Update local state of the charging point
+    public String updateState(String chargerId, String state) {
+        // Example: just log for now
+        return "Updated charger " + chargerId + " state to " + state;
+    }
+
+    // Start session by chargerId
     public String startSession(String chargerId, String driverId) {
-        ChargingSession existing = activeSessions.get(chargerId);
+        ChargingSession existing = activeSessionsByCharger.get(chargerId);
         if (existing != null) {
             if (existing.getStatus().equals("PAUSED")) {
                 existing.resume();
@@ -57,21 +63,38 @@ public class ChargingStation {
         }
 
         ChargingSession session = new ChargingSession(chargerId, driverId);
-        activeSessions.put(chargerId, session);
+        activeSessionsByCharger.put(chargerId, session);
+        activeSessionsById.put(session.getSessionId(), session);
         return "Created new session (waiting for plug): " + session.getSessionId();
     }
 
+    // Start session by sessionId
+    public String startSessionById(String sessionId) {
+        ChargingSession session = activeSessionsById.get(sessionId);
+        if (session == null)
+            return "No session found with ID " + sessionId;
+
+        if (session.getStatus().equals("PAUSED")) {
+            session.resume();
+            return "Resumed paused session " + sessionId;
+        }
+        return "Session " + sessionId + " is already running";
+    }
+
+    // Stop a session
     public String stopSession(String chargerId) {
-        ChargingSession session = activeSessions.get(chargerId);
+        ChargingSession session = activeSessionsByCharger.get(chargerId);
         if (session == null)
             return "No active session on charger " + chargerId;
         session.end();
-        activeSessions.remove(chargerId);
+        activeSessionsByCharger.remove(chargerId);
+        activeSessionsById.remove(session.getSessionId());
         return "Session stopped: " + session.getSessionId();
     }
 
+    // Plug in / unplug
     public String plugIn(String chargerId) {
-        ChargingSession session = activeSessions.get(chargerId);
+        ChargingSession session = activeSessionsByCharger.get(chargerId);
         if (session == null)
             return "No session on charger " + chargerId;
         session.plugIn();
@@ -79,15 +102,16 @@ public class ChargingStation {
     }
 
     public String unplug(String chargerId) {
-        ChargingSession session = activeSessions.get(chargerId);
+        ChargingSession session = activeSessionsByCharger.get(chargerId);
         if (session == null)
             return "No session on charger " + chargerId;
         session.unplug();
         return "Charger " + chargerId + " unplugged. Session is now " + session.getStatus();
     }
 
+    // Pause / resume
     public String pause(String chargerId) {
-        ChargingSession session = activeSessions.get(chargerId);
+        ChargingSession session = activeSessionsByCharger.get(chargerId);
         if (session == null)
             return "No session on charger " + chargerId;
         session.pause();
@@ -95,7 +119,7 @@ public class ChargingStation {
     }
 
     public String resume(String chargerId) {
-        ChargingSession session = activeSessions.get(chargerId);
+        ChargingSession session = activeSessionsByCharger.get(chargerId);
         if (session == null)
             return "No session on charger " + chargerId;
         session.resume();
@@ -103,17 +127,29 @@ public class ChargingStation {
     }
 
     public String pauseAll() {
-        activeSessions.values().forEach(ChargingSession::pause);
+        activeSessionsByCharger.values().forEach(ChargingSession::pause);
         return "All sessions paused.";
     }
 
     public String resumeAll() {
-        activeSessions.values().forEach(ChargingSession::resume);
+        activeSessionsByCharger.values().forEach(ChargingSession::resume);
         return "All sessions resumed.";
     }
 
+    // Send telemetry
+    public String sendTelemetry(String sessionId, double kWh, double power) {
+        ChargingSession session = activeSessionsById.get(sessionId);
+        if (session == null)
+            return "No session found with ID " + sessionId;
+        // The ChargingSession.addTelemetry(double,double) method does not exist,
+        // so log the telemetry locally here (or update when ChargingSession supports
+        // it).
+        System.out.println("Telemetry for session " + sessionId + ": kWh=" + kWh + ", power=" + power);
+        return "Telemetry received for session " + sessionId;
+    }
+
     public String status(String chargerId) {
-        ChargingSession session = activeSessions.get(chargerId);
+        ChargingSession session = activeSessionsByCharger.get(chargerId);
         if (session == null)
             return "No session on charger " + chargerId;
         session.printStatus();

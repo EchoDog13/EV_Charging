@@ -1,11 +1,10 @@
 package com.kylebarker.ev_cp;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import picocli.CommandLine;
-import picocli.CommandLine.Option;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import picocli.CommandLine;
+import picocli.CommandLine.Option;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -43,253 +42,183 @@ public class EV_CP_M implements Runnable {
     @Option(names = { "-l", "--location" }, description = "Charging point location")
     String cpLocation;
 
-    Socket centralSocket = null;
-    BufferedReader in = null;
-    PrintWriter out = null;
+    private volatile Socket centralSocket = null;
+    private volatile BufferedReader in = null;
+    private volatile PrintWriter out = null;
 
-    String state = "DISCONNECTED";
-
-    private Thread healthCheckThread;
+    private volatile String state = "DISCONNECTED";
     private volatile boolean running = true;
 
+    private Thread healthCheckThread;
+    private Thread centralReaderThread;
     private ExecutorService engineThreadPool = Executors.newCachedThreadPool();
     private ObjectMapper mapper = new ObjectMapper();
 
     @Override
     public void run() {
-        // Print parsed configuration
-        //
-
-        // Initialize a socket connection with the central server
-        initConnection();
         startEngineListener();
 
         if (registerFlag) {
-            // Check that all the required arguments are given for registration
-            if ((centralIP != null) && (!centralIP.isEmpty()) && (centralPort > 0) && enginePort > 0 && engineIP != null
-                    && !engineIP.isEmpty()) {
-                register();
-            }
+            attemptRegistration();
         }
 
-        // Listen for incoming messages from server
-        try {
-            String serverMsg;
-            while ((serverMsg = in.readLine()) != null) {
-                System.out.println("Received from server: " + serverMsg);
-                handleServerMessage(serverMsg);
-            }
-        } catch (IOException e) {
-            System.out.println("Connection closed: " + e.getMessage());
-        } finally {
-            stopHealthCheck();
+        startHealthCheck();
+
+        // Start central message reader in a separate thread
+        startCentralReader();
+
+        // Keep main thread alive
+        while (running) {
             try {
-                if (centralSocket != null)
-                    centralSocket.close();
-            } catch (IOException e) {
-                e.printStackTrace();
+                Thread.sleep(1000);
+            } catch (InterruptedException ignored) {
             }
         }
     }
 
-    private void initConnection() {
-        int retries = 10;
-        int waitTime = 1000;
-        for (int i = 0; i < retries; i++) {
+    private void startCentralReader() {
+        centralReaderThread = new Thread(() -> {
+            while (running) {
+                if (in != null) {
+                    try {
+                        String serverMsg = in.readLine();
+                        if (serverMsg == null) {
+                            System.err.println("Central closed connection. Attempting reconnect...");
+                            reconnectCentral();
+                            continue;
+                        }
+                        handleServerMessage(serverMsg);
+                    } catch (IOException e) {
+                        System.err.println("Error reading from central: " + e.getMessage());
+                        reconnectCentral();
+                    }
+                } else {
+                    reconnectCentral();
+                }
+            }
+        });
+        centralReaderThread.setDaemon(true);
+        centralReaderThread.start();
+    }
+
+    private void reconnectCentral() {
+        closeCentral();
+
+        while (running) {
             try {
+                System.out.println("Attempting to reconnect to central...");
                 centralSocket = new Socket(centralIP, centralPort);
                 in = new BufferedReader(new InputStreamReader(centralSocket.getInputStream()));
                 out = new PrintWriter(centralSocket.getOutputStream(), true);
-                System.out.println("Connected to central server!");
+                System.out.println("Reconnected to central!");
+
+                if (registerFlag) {
+                    attemptRegistration();
+                }
+
+                // Set state to ACTIVATED on reconnect
+                state = "ACTIVATED";
+                System.out.println("State set to ACTIVATED after reconnect.");
+
                 break;
             } catch (IOException e) {
-                System.err.println("Connection attempt " + (i + 1) + " failed: " + e.getMessage());
-                System.err.println("centralIP: " + centralIP + "centralport: " + centralPort);
+                System.err.println("Reconnect failed, retrying in 5s...");
                 try {
-                    Thread.sleep(waitTime);
+                    Thread.sleep(5000);
                 } catch (InterruptedException ignored) {
                 }
             }
         }
     }
 
-    public void register() {
-        System.out.println("Registering with central server at " + centralIP + ":" + centralPort);
+    private void closeCentral() {
+        try {
+            if (centralSocket != null)
+                centralSocket.close();
+        } catch (IOException ignored) {
+        }
+        centralSocket = null;
+        in = null;
+        out = null;
+    }
 
-        // Establish connection with central server
+    private void attemptRegistration() {
         if (centralSocket == null || centralSocket.isClosed()) {
-            initConnection();
+            reconnectCentral();
         }
-
-        ObjectMapper mapper = new ObjectMapper();
-        ObjectNode json = mapper.createObjectNode();
-
-        json.put("function", "register");
-        json.put("uid", uid);
-        json.put("pricePerKW", pricePerKW);
-        json.put("location", cpLocation);
-        json.put("state", state);
-
-        // Send registration request
-        String registrationJson = json.toString();
-        System.out.println("Sending registration: " + registrationJson);
-        out.println(registrationJson);
-        out.flush();
-
-        boolean registered = false;
-        long startTime = System.currentTimeMillis();
-        long timeout = 10000; // 10 seconds
 
         try {
-            // Set a read timeout on the socket
-            centralSocket.setSoTimeout(10000);
+            ObjectNode json = mapper.createObjectNode();
+            json.put("function", "register");
+            json.put("uid", uid);
+            json.put("pricePerKW", pricePerKW);
+            json.put("location", cpLocation);
+            json.put("state", state);
 
-            while (!registered && (System.currentTimeMillis() - startTime < timeout)) {
-                String response = in.readLine(); // This will block for up to 10 seconds
-
-                if (response == null) {
-                    System.err.println("Connection closed by server during registration");
-                    break;
-                }
-
-                System.out.println("Registration response: " + response);
-
-                try {
-                    JsonNode node = mapper.readTree(response);
-
-                    if (node.has("status") && node.has("function")) {
-                        String status = node.get("status").asText();
-                        String function = node.get("function").asText();
-
-                        if ("success".equals(status) && "register".equals(function)) {
-                            System.out.println("Registration successful! Starting health checks...");
-                            state = "ACTIVATED";
-                            registered = true;
-                            startHealthCheck();
-                            break; // Success, exit loop
-                        } else if ("error".equals(status) && "register".equals(function)) {
-                            System.err.println("Registration failed. Server returned error.");
-                            break;
-                        } else {
-                            // Not a registration response, continue waiting
-                            System.out
-                                    .println("Received unrelated message, still waiting for registration response...");
-                            continue;
-                        }
-                    }
-                } catch (Exception e) {
-                    System.err.println("Error parsing registration response: " + e.getMessage());
-                    // Continue waiting for valid response
-                }
-            }
-
-            if (!registered) {
-                System.err.println("Registration timed out or failed after " + timeout + "ms");
-            }
-
-        } catch (java.net.SocketTimeoutException e) {
-            System.err.println("Registration timeout: No response from server within 10 seconds");
-        } catch (IOException e) {
-            System.err.println("Error during registration: " + e.getMessage());
-        } finally {
-            try {
-                centralSocket.setSoTimeout(0); // Reset timeout
-            } catch (IOException e) {
-                // Ignore
-            }
-        }
-
-        if (!registered) {
-            System.err.println("Shutting down due to registration failure...");
-            stopHealthCheck();
-        }
-    }
-
-    private void handleServerMessage(String message) {
-        try {
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode node = mapper.readTree(message);
-
-            if (node.has("function")) {
-                String function = node.get("function").asText();
-                switch (function) {
-                    case "setCPState":
-                        setStatus(node);
-                        break;
-                    // Add other function handlers as needed
-                }
-            }
-        } catch (IOException e) {
-            System.err.println("Error parsing server message: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Sets the status of the CP
-     */
-    private void setStatus(JsonNode node) {
-        if (node.has("state")) {
-            state = node.get("state").asText();
-            System.out.println("Status updated to: " + state);
+            out.println(json.toString());
+            out.flush();
+            System.out.println("Registration sent: " + json.toString());
+        } catch (Exception e) {
+            System.err.println("Registration failed: " + e.getMessage());
         }
     }
 
     private void startHealthCheck() {
         healthCheckThread = new Thread(() -> {
             while (running) {
+                sendHealthCheck();
                 try {
-                    sendHealthCheck();
-                    Thread.sleep(1000); // Wait 1 second
-                } catch (InterruptedException e) {
-                    System.out.println("Health check thread interrupted");
-                    break;
-                } catch (Exception e) {
-                    System.err.println("Error in health check: " + e.getMessage());
+                    Thread.sleep(1000);
+                } catch (InterruptedException ignored) {
                 }
             }
         });
+        healthCheckThread.setDaemon(true);
         healthCheckThread.start();
         System.out.println("Health checks started");
     }
 
     private void sendHealthCheck() {
-        if (out != null && centralSocket != null && !centralSocket.isClosed()) {
+        if (out != null) {
             try {
-                ObjectMapper mapper = new ObjectMapper();
                 ObjectNode healthCheckJson = mapper.createObjectNode();
                 healthCheckJson.put("function", "healthcheck");
                 healthCheckJson.put("uid", uid);
                 healthCheckJson.put("timestamp", System.currentTimeMillis());
                 healthCheckJson.put("state", state);
-
                 out.println(healthCheckJson.toString());
-                System.out.println("Health check sent - UID: " + uid + ", State: " + state);
+
+                // Print to monitor log
+                System.out.println("Health check sent: " + healthCheckJson.toString());
             } catch (Exception e) {
                 System.err.println("Failed to send health check: " + e.getMessage());
-                stopHealthCheck();
             }
+        } else {
+            System.out.println("Health check not sent: central not connected.");
         }
     }
 
-    private void stopHealthCheck() {
-        running = false;
-        if (healthCheckThread != null) {
-            healthCheckThread.interrupt();
+    private void handleServerMessage(String message) {
+        try {
+            JsonNode node = mapper.readTree(message);
+            if (node.has("function")) {
+                String function = node.get("function").asText();
+                switch (function) {
+                    case "setCPState":
+                        setStatus(node);
+                        break;
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Invalid JSON from server: " + e.getMessage());
         }
-        System.out.println("Health checks stopped");
     }
 
-    public static void main(String[] args) {
-        EV_CP_M client = new EV_CP_M();
-
-        // Add shutdown hook for proper cleanup
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.println("Shutting down...");
-            client.stopHealthCheck();
-        }));
-
-        int exitCode = new CommandLine(client).execute(args);
-        System.exit(exitCode);
+    private void setStatus(JsonNode node) {
+        if (node.has("state")) {
+            state = node.get("state").asText();
+            System.out.println("Status updated to: " + state);
+        }
     }
 
     private void startEngineListener() {
@@ -320,7 +249,6 @@ public class EV_CP_M implements Runnable {
             while ((line = reader.readLine()) != null) {
                 try {
                     JsonNode json = mapper.readTree(line);
-
                     if (json.has("function") && "healthcheck".equals(json.get("function").asText())) {
                         int uid = json.has("uid") ? json.get("uid").asInt() : -1;
                         String state = json.has("state") ? json.get("state").asText() : "UNKNOWN";
@@ -330,13 +258,10 @@ public class EV_CP_M implements Runnable {
                         System.out.println("Health check received - UID: " + uid + ", State: " + state + ", Timestamp: "
                                 + timestamp);
 
-                        // Send acknowledgment back
                         ObjectNode ack = mapper.createObjectNode();
                         ack.put("function", "ack");
                         ack.put("status", "received");
                         writer.println(ack.toString());
-                    } else {
-                        System.out.println("Unknown message from engine: " + line);
                     }
                 } catch (Exception e) {
                     System.err.println("Invalid JSON from engine: " + line);
@@ -346,5 +271,17 @@ public class EV_CP_M implements Runnable {
         } catch (IOException e) {
             System.err.println("Engine connection closed: " + e.getMessage());
         }
+    }
+
+    public static void main(String[] args) {
+        EV_CP_M client = new EV_CP_M();
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("Shutting down...");
+            client.running = false;
+        }));
+
+        int exitCode = new CommandLine(client).execute(args);
+        System.exit(exitCode);
     }
 }
