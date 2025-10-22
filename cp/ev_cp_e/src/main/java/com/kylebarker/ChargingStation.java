@@ -5,7 +5,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
-import java.util.Random;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -18,24 +17,21 @@ public class ChargingStation {
 
     private final String chargerId;
 
-    private String generateChargerId() {
-        Random random = new Random();
-        int number = 1000 + random.nextInt(9000);
-        return "CHG-" + number;
-    }
+    // Charger ID is now required to be supplied via configuration; no
+    // auto-generation.
 
     public String getChargerId() {
         return chargerId;
     }
 
     public ChargingStation(@Value("${charger.id:}") String configuredChargerId) {
-        if (configuredChargerId != null && !configuredChargerId.isBlank()) {
-            this.chargerId = configuredChargerId;
-        } else {
-            this.chargerId = generateChargerId();
+        if (configuredChargerId == null || configuredChargerId.isBlank()) {
+            throw new IllegalStateException(
+                    "Required property 'charger.id' is missing or blank. Set via -Dcharger.id=... or CHARGER_ID env.");
         }
+        this.chargerId = configuredChargerId;
 
-        System.out.println("Charging Station started with ID: " + chargerId);
+        System.out.println("Charging Station started with ID: " + chargerId + " (configured)");
 
         energyUpdater.scheduleAtFixedRate(new TimerTask() {
             @Override

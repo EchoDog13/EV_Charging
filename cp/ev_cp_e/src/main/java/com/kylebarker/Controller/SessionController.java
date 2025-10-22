@@ -14,24 +14,29 @@ public class SessionController {
     // Update local state of the charging point
     @PostMapping("/cp/{cpUid}/state")
     public String updateState(@PathVariable String cpUid, @RequestParam String state) {
-        return station.updateState(cpUid, state); // You'll need to implement updateState in ChargingStation
+        if (!cpUid.equals(station.getChargerId())) {
+            return "This CP instance is configured as " + station.getChargerId() + ". Request targeted " + cpUid + ".";
+        }
+        return station.updateState(cpUid, state);
     }
 
     // Submit a manual charge request from CP UI
     @PostMapping("/cp/{cpUid}/charge-requests")
     public String manualChargeRequest(@PathVariable String cpUid, @RequestParam String driverId) {
+        if (!cpUid.equals(station.getChargerId())) {
+            return "This CP instance is configured as " + station.getChargerId() + ". Request targeted " + cpUid + ".";
+        }
         return station.startSession(cpUid, driverId); // Using startSession for manual requests
     }
 
     // Simulate plugging in a vehicle
-    @PostMapping("/cp/{cpUid}/plug")
-    public String plug(@PathVariable String cpUid) {
-        return station.plugIn(cpUid);
-    }
 
     // Simulate unplugging a vehicle
     @PostMapping("/cp/{cpUid}/unplug")
     public String unplug(@PathVariable String cpUid) {
+        if (!cpUid.equals(station.getChargerId())) {
+            return "This CP instance is configured as " + station.getChargerId() + ". Request targeted " + cpUid + ".";
+        }
         return station.unplug(cpUid);
     }
 
@@ -55,6 +60,9 @@ public class SessionController {
     // Stop a charging session locally
     @PostMapping("/cp/session/{cpUid}/stop")
     public String stopSession(@PathVariable String cpUid) {
+        if (!cpUid.equals(station.getChargerId())) {
+            return "This CP instance is configured as " + station.getChargerId() + ". Request targeted " + cpUid + ".";
+        }
         return station.stopSession(cpUid);
     }
 }
