@@ -1,0 +1,10 @@
+body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:24px;background:#0b1220;color:#e6e6e6}
+h1{margin:0 0 12px}
+table{width:100%;border-collapse:collapse;margin-top:12px}
+th,td{padding:10px;border-bottom:1px solid #233}
+.pill{padding:4px 8px;border-radius:999px;font-weight:600}
+.ACTIVATED{background:#1b4;color:#0b0}
+.DISCONNECTED{background:#445;color:#ccd}
+.STOPPED{background:#864;color:#feb}
+.FAULT{background:#833;color:#f88}
+.muted{opacity:.7;font-size:.9em}

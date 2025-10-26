@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Charging Point Monitor</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <h1>Charging Point Monitor</h1>
+
+  <section class="card">
+    <div class="row">
+      <label>CP UID:</label>
+      <input id="cpUid" value="CP101"/>
+      <button id="btnRefresh">Refresh</button>
+    </div>
+    <pre id="output">—</pre>
+  </section>
+
+  <section class="card">
+    <h2>Actions</h2>
+    <div class="row">
+      <button onclick="setState('ACTIVATED')">Activate</button>
+      <button onclick="setState('STOPPED')">Stop</button>
+      <button onclick="setState('FAULT')">Fault</button>
+    </div>
+    <div class="row">
+      <button onclick="plug()">Plug Vehicle</button>
+      <button onclick="unplug()">Unplug Vehicle</button>
+    </div>
+  </section>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>

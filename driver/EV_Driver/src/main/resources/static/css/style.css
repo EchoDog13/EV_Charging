@@ -1,0 +1,20 @@
+*{box-sizing:border-box}
+body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:24px;background:#0b1220;color:#e6e6e6}
+h1{margin:0 0 16px}
+h2{margin:0 0 12px;font-size:1.1rem}
+label{min-width:110px;opacity:.85}
+.link{color:#9cf;text-decoration:none;border:1px solid #2c3e6b;padding:6px 10px;border-radius:8px;margin-left:auto}
+.link:hover{background:#15203a}
+input,select{background:#0f172a;border:1px solid #2a3348;color:#e6e6e6;padding:8px 10px;border-radius:8px}
+button{background:#1f2a44;color:#fff;border:1px solid #334;padding:8px 12px;border-radius:10px;cursor:pointer}
+button:hover{filter:brightness(1.1)}
+.row{display:flex;gap:10px;align-items:center;margin:8px 0}
+.card{background:#0b1530;border:1px solid #1d2640;border-radius:16px;padding:14px;margin:14px 0;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+table{width:100%;border-collapse:collapse;margin-top:8px}
+th,td{padding:10px;border-bottom:1px solid #22314d}
+pre{margin:8px 0;background:#0f172a;border:1px solid #233;padding:10px;border-radius:12px;white-space:pre-wrap;word-break:break-word}
+.pill{padding:4px 8px;border-radius:999px;font-weight:600}
+.ACTIVATED{background:#1b4;color:#0b0}
+.DISCONNECTED{background:#445;color:#ccd}
+.STOPPED{background:#864;color:#feb}
+.FAULT{background:#833;color:#f88}

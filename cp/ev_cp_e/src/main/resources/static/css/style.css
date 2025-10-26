@@ -1,0 +1,9 @@
+body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:24px;background:#0b1220;color:#e6e6e6}
+h1{margin:0 0 12px}
+.card{background:#0f172a;border:1px solid #223;padding:14px;border-radius:12px;margin:14px 0}
+.row{display:flex;gap:10px;align-items:center;margin:8px 0}
+input{background:#0f172a;border:1px solid #2a3348;color:#e6e6e6;padding:8px 10px;border-radius:8px}
+button{background:#1f2a44;color:#fff;border:1px solid #334;padding:8px 12px;border-radius:8px;cursor:pointer}
+button:hover{filter:brightness(1.1)}
+pre{background:#0f172a;border:1px solid #233;padding:10px;border-radius:10px;white-space:pre-wrap;word-break:break-word}
+.muted{opacity:.7;font-size:.9em}
