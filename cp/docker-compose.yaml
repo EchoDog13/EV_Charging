@@ -31,7 +31,7 @@ services:
       - UID=${COMPOSE_PROJECT_NAME}
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=192.168.100.10:9092
       # Local charger id for this engine instance. Set CHARGER_ID here (fixed) or via an .env file.
-      - CHARGER_ID=CHG-2849
+      - CHARGER_ID=2849
     command: >
       sh -c "
       echo 'Waiting for monitor to start...' &&

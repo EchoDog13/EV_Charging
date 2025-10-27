@@ -24,6 +24,11 @@ public class ChargingStation {
         return chargerId;
     }
 
+    // Expose current active session count for UI/status endpoints
+    public int getActiveSessionCount() {
+        return activeSessionsByCharger.size();
+    }
+
     public ChargingStation(@Value("${charger.id:}") String configuredChargerId) {
         if (configuredChargerId == null || configuredChargerId.isBlank()) {
             throw new IllegalStateException(
@@ -142,6 +147,14 @@ public class ChargingStation {
         // it).
         System.out.println("Telemetry for session " + sessionId + ": kWh=" + kWh + ", power=" + power);
         return "Telemetry received for session " + sessionId;
+    }
+
+    // Send telemetry by chargerId (finds session and delegates)
+    public String sendTelemetryForCharger(String chargerId, double kWh, double power) {
+        ChargingSession session = activeSessionsByCharger.get(chargerId);
+        if (session == null)
+            return "No active session on charger " + chargerId;
+        return sendTelemetry(session.getSessionId(), kWh, power);
     }
 
     public String status(String chargerId) {

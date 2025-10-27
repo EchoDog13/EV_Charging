@@ -2,7 +2,10 @@ package com.kylebarker.Controller;
 
 import com.kylebarker.ChargingStation;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
@@ -20,6 +23,25 @@ public class SessionController {
         return station.updateState(cpUid, state);
     }
 
+    // Read basic status about this CP (for UI)
+    @GetMapping("/cp/{cpUid}/state")
+    public ResponseEntity<?> readState(@PathVariable String cpUid) {
+        if (!cpUid.equals(station.getChargerId())) {
+            return ResponseEntity.status(403).body("This CP instance is configured as " + station.getChargerId()
+                    + ". Request targeted " + cpUid + ".");
+        }
+        // Return a small JSON payload describing the station
+        return ResponseEntity.ok(Map.of(
+                "chargerId", station.getChargerId(),
+                "activeSessions", station.getActiveSessionCount()));
+    }
+
+    // Return the configured charger id for this instance
+    @GetMapping("/cp/self")
+    public ResponseEntity<?> self() {
+        return ResponseEntity.ok(Map.of("chargerId", station.getChargerId()));
+    }
+
     // Submit a manual charge request from CP UI
     @PostMapping("/cp/{cpUid}/charge-requests")
     public String manualChargeRequest(@PathVariable String cpUid, @RequestParam String driverId) {
@@ -30,6 +52,13 @@ public class SessionController {
     }
 
     // Simulate plugging in a vehicle
+    @PostMapping("/cp/{cpUid}/plug")
+    public String plug(@PathVariable String cpUid) {
+        if (!cpUid.equals(station.getChargerId())) {
+            return "This CP instance is configured as " + station.getChargerId() + ". Request targeted " + cpUid + ".";
+        }
+        return station.plugIn(cpUid);
+    }
 
     // Simulate unplugging a vehicle
     @PostMapping("/cp/{cpUid}/unplug")
@@ -43,9 +72,7 @@ public class SessionController {
     // Start an authorized charging session
     @PostMapping("/cp/session/{sessionId}/start")
     public String startSession(@PathVariable String sessionId) {
-        // Your ChargingStation currently starts sessions by chargerId, not sessionId
-        // If sessionId maps to chargerId, you can use:
-        return "Not implemented: map sessionId to chargerId";
+        return station.startSessionById(sessionId);
     }
 
     // Send charging telemetry (kWh, power, etc.)
@@ -53,8 +80,18 @@ public class SessionController {
     public String sendTelemetry(@PathVariable String sessionId,
             @RequestParam double kWh,
             @RequestParam double power) {
-        // You would need to implement sendTelemetry in ChargingStation
-        return "Not implemented: send telemetry for sessionId";
+        return station.sendTelemetry(sessionId, kWh, power);
+    }
+
+    // Send telemetry by charger id (UI-friendly)
+    @PostMapping("/cp/{cpUid}/telemetry")
+    public String sendTelemetryByCharger(@PathVariable String cpUid,
+            @RequestParam double kWh,
+            @RequestParam double power) {
+        if (!cpUid.equals(station.getChargerId())) {
+            return "This CP instance is configured as " + station.getChargerId() + ". Request targeted " + cpUid + ".";
+        }
+        return station.sendTelemetryForCharger(cpUid, kWh, power);
     }
 
     // Stop a charging session locally
