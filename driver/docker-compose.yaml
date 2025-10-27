@@ -7,16 +7,11 @@ services:
       dockerfile: dockerfile
     container_name: ev-driver
     image: ev_driver:latest
-    ports:
-      - "8083:8080"   # external:internal (you can change 8083 to any free port)
-    environment:
-      - JAVA_OPTS=-Xmx256m
-      - SPRING_PROFILES_ACTIVE=prod
-      - SERVER_PORT=8080
     networks:
-      - ev-network
+      alicante: 
+        ipv4_address: 192.168.100.103
     restart: unless-stopped
 
 networks:
-  ev-network:
-    external: true  # So this can connect to other Docker Compose projects (like CP, Central, etc.)
+  alicante:
+    external: true 
