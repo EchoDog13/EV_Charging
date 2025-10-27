@@ -13,13 +13,14 @@ Arguments:
   base-port   Starting host port to map (default: 8083)
   image-name  Docker image name to use/build (default: ev_driver:dev)
   network     Docker network to attach containers to (default: ev-network)
+  bind-addr   Optional host IP to bind published ports to (default: bind on all interfaces / localhost). Example: 192.168.100.50
 
 Examples:
   # start 3 drivers on ports 8083,8084,8085
   ./scripts/run-drivers.sh 3
 
-  # start 5 drivers starting at port 9000 using a custom image name
-  ./scripts/run-drivers.sh 5 9000 mydriver:latest my-network
+  # start 5 drivers starting at port 9000 using a custom image name and bind to 192.168.100.50
+  ./scripts/run-drivers.sh 5 9000 mydriver:latest my-network 192.168.100.50
 EOF
 }
 
@@ -38,6 +39,8 @@ fi
 BASE_PORT=${2:-8083}
 IMAGE_NAME=${3:-ev_driver:dev}
 NETWORK=${4:-ev-network}
+# Optional bind address for host-side port publishing. If empty, docker -p HOSTPORT:CONTAINERPORT binds to all interfaces (0.0.0.0) which is commonly shown as localhost in messages.
+BIND_ADDR=${5:-}
 
 # helper to check command
 command -v docker >/dev/null 2>&1 || { echo "docker CLI not found in PATH. Install Docker and try again." >&2; exit 3; }
@@ -69,8 +72,16 @@ for i in $(seq 1 "$COUNT"); do
     docker rm -f "$name"
   fi
 
-  echo "Running container $name -> http://localhost:${port}/"
-  docker run -d --name "$name" -p "${port}:8080" --network "$NETWORK" "${default_env[@]}" "$IMAGE_NAME" >/dev/null
+  if [[ -n "$BIND_ADDR" ]]; then
+    # Bind to specific host IP address: use ip:hostPort:containerPort format
+    publish_arg="${BIND_ADDR}:${port}:8080"
+    echo "Running container $name -> http://${BIND_ADDR}:${port}/ (binding to ${BIND_ADDR})"
+  else
+    publish_arg="${port}:8080"
+    echo "Running container $name -> http://localhost:${port}/"
+  fi
+
+  docker run -d --name "$name" -p "$publish_arg" --network "$NETWORK" "${default_env[@]}" "$IMAGE_NAME" >/dev/null
   started+=("$name:$port")
 done
 
@@ -78,7 +89,12 @@ echo "Started ${#started[@]} driver container(s):"
 for s in "${started[@]}"; do
   name=${s%%:*}
   port=${s##*:}
-  echo "  - $name  ->  http://localhost:${port}/"
+  if [[ -n "$BIND_ADDR" ]]; then
+    host_display=$BIND_ADDR
+  else
+    host_display=localhost
+  fi
+  echo "  - $name  ->  http://${host_display}:${port}/"
 done
 
 echo "Done. To follow logs, run: docker logs -f <container-name>"

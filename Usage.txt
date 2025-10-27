@@ -14,6 +14,8 @@ Host IP Layout
 
 
 
+
+
 Useful commands
 
 Start central services: "./br.sh" run from root directory - make sure to run chmod +x ./br.sh 
