@@ -20,9 +20,9 @@ import java.util.stream.Collectors;
 
 @SpringBootApplication(scanBasePackages = "com.kylebarker.ev_central")
 
-@CrossOrigin(origins = "*")
+@CrossOrigin("*")
 @RestController
-@RequestMapping("/central/")
+@RequestMapping("/central")
 public class ChargerController {
 
     private final ChargerRepository repository;

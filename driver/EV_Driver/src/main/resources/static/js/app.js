@@ -6,7 +6,7 @@ const tbody = $("#tbl tbody");
 // accordingly (see notes below).
 // Default CENTRAL_BASE: http://localhost:5500 (change if central is on a different host)
 const CENTRAL_BASE = (
-  window.CENTRAL_BASE || "http://192.168.100.100:5500"
+  window.CENTRAL_BASE || "http://192.168.100.100:9900"
 ).replace(/\/$/, "");
 
 const API = {
