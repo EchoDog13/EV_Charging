@@ -31,7 +31,7 @@
         <module>cp/ev_cp_e</module>
         <module>driver/EV_Driver</module>
         <module>infrastructure/eureka-server</module>
-        <module>infrastructure/api_gateway</module>
+        <module>infrastructure/gateway</module>
     </modules>
 
 
