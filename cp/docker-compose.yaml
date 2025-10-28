@@ -9,11 +9,18 @@ services:
     build: ./ev_cp_m
     image: ev_cp_m:latest
     networks:
-      alicante:
-        ipv4_address: 192.168.100.30
+      - alicante
     ports:
       - "5050:5050"   # optional; internal communication doesn't need this
     command: "${MONITOR_COMMAND}"
+    environment:
+      - CHARGER_ID=${CHARGER_ID:-1000}
+      - ENGINE_PORT=5050
+      - CENTRAL_IP=${CENTRAL_IP}
+      - CENTRAL_PORT=${CENTRAL_PORT}
+
+
+
     deploy:
       replicas: 1
 
@@ -21,21 +28,19 @@ services:
     build: ./ev_cp_e
     image: ev_engine:latest
     networks:
-      alicante:
-        ipv4_address: 192.168.100.31
+      - alicante
     ports: 
       - "3333:8080"
     environment:
-      - MONITOR_HOST=monitor
-      - MONITOR_PORT=5050
-      - UID=${COMPOSE_PROJECT_NAME}
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=192.168.100.10:9092
-      # Local charger id for this engine instance. Set CHARGER_ID here (fixed) or via an .env file.
-      - CHARGER_ID=2849
+      - CHARGER_ID=${CHARGER_ID:-1000}
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BROKER}
+
     command: >
       sh -c "
       echo 'Waiting for monitor to start...' &&
       sleep 7 &&
+      # Use the CHARGER_ID environment variable provided by compose. This allows
+      # passing the value on the docker-compose command line or via an .env file.
       java -Dcharger.id=$CHARGER_ID -jar app.jar
       "
     depends_on:

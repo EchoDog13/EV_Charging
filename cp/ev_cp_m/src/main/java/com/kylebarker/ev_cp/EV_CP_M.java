@@ -18,28 +18,36 @@ import java.util.concurrent.Executors;
 
 public class EV_CP_M implements Runnable {
 
-    @Option(names = { "-cp", "--central-port" }, description = "Central server port", required = true)
-    Integer centralPort;
+    // @Option(names = { "-cp", "--central-port" }, description = "Central server
+    // port", required = true)
+    Integer centralPort = Integer.parseInt(System.getenv().getOrDefault("CENTRAL_PORT", "5500"));
 
-    @Option(names = { "-ci", "--central-ip" }, description = "Central server IP or hostname", required = true)
-    String centralIP;
+    // @Option(names = { "-ci", "--central-ip" }, description = "Central server IP
+    // or hostname", required = true)
+    String centralIP = System.getenv().getOrDefault("CENTRAL_IP", "");
 
-    @Option(names = { "-ep", "--engine-port" }, description = "Port of the engine")
-    Integer enginePort;
+    // @Option(names = { "-ep", "--engine-port" }, description = "Port of the
+    // engine")
+    Integer enginePort = Integer.parseInt(System.getenv().getOrDefault("ENGINE_PORT", "5050"));
 
-    @Option(names = { "-ei", "--engine-ip" }, description = "Engine IP or hostname")
-    String engineIP;
+    // @Option(names = { "-ei", "--engine-ip" }, description = "Engine IP or
+    // hostname")
+    String engineIP = System.getenv().getOrDefault("HOST_IP", "locaAhost");
 
-    @Option(names = { "-u", "--uid" }, description = "Unique Identifier of charge point")
-    int uid;
+    // @Option(names = { "-u", "--uid" }, description = "Unique Identifier of charge
+    // point")
+    int uid = Integer.parseInt(System.getenv().getOrDefault("CHARGER_ID", "0"));
 
-    @Option(names = { "-c", "--cost" }, description = "Price per KW (default: ${DEFAULT-VALUE})")
+    // @Option(names = { "-c", "--cost" }, description = "Price per KW (default:
+    // ${DEFAULT-VALUE})")
     double pricePerKW = 10;
 
-    @Option(names = { "-r", "--register" }, description = "Register with the central server")
-    boolean registerFlag = false;
+    // @Option(names = { "-r", "--register" }, description = "Register with the
+    // central server")
+    boolean registerFlag = true;
 
-    @Option(names = { "-l", "--location" }, description = "Charging point location")
+    // @Option(names = { "-l", "--location" }, description = "Charging point
+    // location")
     String cpLocation;
 
     private volatile Socket centralSocket = null;
@@ -106,7 +114,7 @@ public class EV_CP_M implements Runnable {
 
         while (running) {
             try {
-                System.out.println("Attempting to reconnect to central...");
+                System.out.println("Attempting to reconnect to central on " + centralIP + ":" + centralPort);
                 centralSocket = new Socket(centralIP, centralPort);
                 in = new BufferedReader(new InputStreamReader(centralSocket.getInputStream()));
                 out = new PrintWriter(centralSocket.getOutputStream(), true);
@@ -275,13 +283,14 @@ public class EV_CP_M implements Runnable {
 
     public static void main(String[] args) {
         EV_CP_M client = new EV_CP_M();
+        // new CommandLine(client).execute(args);
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             System.out.println("Shutting down...");
             client.running = false;
         }));
 
-        int exitCode = new CommandLine(client).execute(args);
-        System.exit(exitCode);
+        client.run();
     }
+
 }
