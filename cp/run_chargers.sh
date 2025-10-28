@@ -16,15 +16,15 @@ if ! [[ "$NUM_CHARGERS" =~ ^[0-9]+$ ]] || [ "$NUM_CHARGERS" -le 0 ]; then
 fi
 
 # Base ports
-BASE_MONITOR_PORT=7030
-BASE_ENGINE_PORT=8030
+BASE_MONITOR_PORT=5050
+BASE_ENGINE_PORT=50000
 
 # Base charger ID
 BASE_CHARGER_ID=1000
 
 # Network-wide variables (adjust to your environment)
-CENTRAL_IP="192.168.100.50"
-CENTRAL_PORT=8080
+CENTRAL_IP="192.168.100.100"
+CENTRAL_PORT=5500
 KAFKA_BROKER="192.168.100.10:9092"
 
 echo "Starting $NUM_CHARGERS charger instances..."
