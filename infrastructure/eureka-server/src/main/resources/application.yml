@@ -1,0 +1,17 @@
+server:
+  address: 0.0.0.0 # same as JAVA_TOOL_OPTIONS
+  port: 8761
+
+spring:
+  application:
+    name: eureka-server
+
+eureka:
+  instance:
+    hostname: 192.168.100.50 # <-- external IP you want everyone to see
+    prefer-ip-address: true
+  client:
+    register-with-eureka: false
+    fetch-registry: false
+    service-url:
+      defaultZone: http://host.docker.internal:8761/eureka/

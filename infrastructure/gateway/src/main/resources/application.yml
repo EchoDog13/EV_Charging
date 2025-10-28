@@ -1,10 +1,24 @@
 spring:
   application:
     name: gateway-service
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true # optional – enables /SERVICE/** routing
+
+server:
+  port: 8080
 
 eureka:
   client:
     service-url:
-      defaultZone: http://192.168.100.50:8761/eureka/
+      defaultZone: http://host.docker.internal:8761/eureka/
     register-with-eureka: true
     fetch-registry: true
+  instance:
+    prefer-ip-address: true
+    ip-address: 192.168.100.50
+    port: 8493 # <-- **external** port
+    metadata-map:
+      management.port: 8493
