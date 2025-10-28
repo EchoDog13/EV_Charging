@@ -11,16 +11,13 @@ services:
     networks:
       - alicante
     ports:
-      - "5050:5050"   # optional; internal communication doesn't need this
+      - "${MONITOR_HOST_PORT}:5050" # <--- Changed here
     command: "${MONITOR_COMMAND}"
     environment:
       - CHARGER_ID=${CHARGER_ID:-1000}
-      - ENGINE_PORT=5050
+      - ENGINE_PORT=5050 # This might need to change if engine communicates with monitor on a specific port. For internal docker network, it's usually service name:port
       - CENTRAL_IP=${CENTRAL_IP}
       - CENTRAL_PORT=${CENTRAL_PORT}
-
-
-
     deploy:
       replicas: 1
 
@@ -29,18 +26,21 @@ services:
     image: ev_engine:latest
     networks:
       - alicante
-    ports: 
-      - "3333:8080"
+    ports:
+      - "${ENGINE_HOST_PORT}:8080" # <--- Changed here
     environment:
       - CHARGER_ID=${CHARGER_ID:-1000}
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BROKER}
+      - SPRING_APPLICATION_NAME=charger-engine
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://192.168.100.50:8761/eureka/
+      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
+      - EUREKA_INSTANCE_HOSTNAME=${CONTAINER_NAME}
+      - EUREKA_INSTANCE_METADATA_CHARGER_ID=${CHARGER_ID:-1000}
 
     command: >
       sh -c "
       echo 'Waiting for monitor to start...' &&
       sleep 7 &&
-      # Use the CHARGER_ID environment variable provided by compose. This allows
-      # passing the value on the docker-compose command line or via an .env file.
       java -Dcharger.id=$CHARGER_ID -jar app.jar
       "
     depends_on:

@@ -1,0 +1,22 @@
+# src/main/resources/application.yml for the API Gateway
+
+server:
+  port: 8080 # The port the gateway listens on *inside* the container
+
+spring:
+  application:
+    name: api-gateway # The name it will register with Eureka as
+  cloud:
+    gateway:
+      # --- Gateway-specific configuration ---
+      routes:
+        - id: my-service
+          uri: lb://MY-SERVICE
+          predicates:
+            - Path=/my-service/**
+
+# The default address for the Eureka server
+eureka:
+  client:
+    service-url:
+      defaultZone: http://192.168.100.50:8761/eureka/
