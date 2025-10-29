@@ -34,3 +34,35 @@ function render(list) {
 // Poll every 5 seconds
 load().catch(console.error);
 setInterval(() => load().catch(console.error), 5000);
+
+// Button handlers for start/stop all
+document.addEventListener("DOMContentLoaded", () => {
+  const startBtn = document.getElementById("start-all");
+  const stopBtn = document.getElementById("stop-all");
+
+  startBtn?.addEventListener("click", async () => {
+    try {
+      const res = await fetch(API_BASE + "/central/cps/commands/start-all", {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error("Start all failed: " + res.status);
+      alert("Start all command sent");
+    } catch (e) {
+      console.error(e);
+      alert("Failed to send start-all");
+    }
+  });
+
+  stopBtn?.addEventListener("click", async () => {
+    try {
+      const res = await fetch(API_BASE + "/central/cps/commands/stop-all", {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error("Stop all failed: " + res.status);
+      alert("Stop all command sent");
+    } catch (e) {
+      console.error(e);
+      alert("Failed to send stop-all");
+    }
+  });
+});

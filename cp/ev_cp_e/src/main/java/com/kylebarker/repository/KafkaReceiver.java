@@ -30,6 +30,14 @@ public class KafkaReceiver {
         System.out.println("Received message: " + message);
         try {
             JsonNode json = objectMapper.readTree(message);
+            // Some producers (or accidental string-wrapping in Kafka messages) send
+            // the JSON as a quoted string, e.g. "{\"type\":\"stopAll\"}".
+            // In that case the root node is textual and we need to parse the inner
+            // content to obtain the actual object fields.
+            if (json.isTextual()) {
+                System.out.println("Received textual JSON wrapper; unwrapping inner JSON...");
+                json = objectMapper.readTree(json.asText());
+            }
             String type = json.path("type").asText("default");
             // Do NOT default missing chargerId to the local charger. If absent, treat as
             // null and
@@ -40,7 +48,7 @@ public class KafkaReceiver {
             String driverId = json.path("driverId").asText("unknown");
 
             // global pause/resume messages have no charger ID, so skip check
-            if (!type.equals("pauseAll") && !type.equals("resumeAll")) {
+            if (!type.equals("stopAll") && !type.equals("startAll")) {
                 if (chargerId == null) {
                     System.out.println("Ignoring message without chargerId for type '" + type + "'");
                     return;
@@ -59,6 +67,7 @@ public class KafkaReceiver {
                 case "unplug" -> handleUnplug();
                 case "pause" -> handlePause();
                 case "resume" -> handleResume();
+                case "stopAll" -> handleStopAll();
                 case "pauseAll" -> pauseAllSessions();
                 case "resumeAll" -> resumeAllSessions();
                 case "status" -> printStatus();
@@ -140,6 +149,37 @@ public class KafkaReceiver {
     private void resumeAllSessions() {
         System.out.println("▶️ Resuming all sessions...");
         activeSessions.values().forEach(ChargingSession::resume);
+    }
+
+    private void handleStopAll() {
+        System.out.println(
+                "⏹ Stop all received: stopping all non-completed sessions (paused sessions will not be resumed)...");
+
+        // End any session that isn't already completed. Do NOT resume paused sessions
+        // first —
+        // stopAll should immediately request sessions to end, regardless of their
+        // current
+        // paused state. Resuming should only happen on startAll.
+        activeSessions.values().forEach(session -> {
+            try {
+                if (!"COMPLETED".equals(session.getStatus())) {
+                    session.end();
+                }
+            } catch (Exception e) {
+                System.err.println("Failed to stop session " + session.getSessionId() + ": " + e.getMessage());
+            }
+        });
+
+        // Remove completed sessions from the map
+        try {
+            activeSessions.entrySet().removeIf(entry -> "COMPLETED".equals(entry.getValue().getStatus()));
+        } catch (Exception e) {
+            // Fallback: iterate keys and remove
+            activeSessions.keySet().removeIf(key -> {
+                ChargingSession s = activeSessions.get(key);
+                return s != null && "COMPLETED".equals(s.getStatus());
+            });
+        }
     }
 
     private void printStatus() {

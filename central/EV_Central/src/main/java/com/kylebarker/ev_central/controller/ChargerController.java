@@ -117,6 +117,16 @@ public class ChargerController {
         return ResponseEntity.ok("Stop all command sent");
     }
 
+    // Start all charging points at once (publishes a startAll message)
+    @PostMapping("/cps/commands/start-all")
+    public ResponseEntity<String> startAllChargers() {
+        JSONObject msg = new JSONObject();
+        msg.put("type", "startAll");
+        kafkaSender.send("CP", msg.toString());
+        messages.put(UUID.randomUUID().toString(), msg);
+        return ResponseEntity.ok("Start all command sent");
+    }
+
     // Authorize a driver's charge request
     @PostMapping("/charge-requests")
     public ResponseEntity<String> authorizeChargeRequest(@RequestParam String driverId, @RequestParam String cpUid) {
