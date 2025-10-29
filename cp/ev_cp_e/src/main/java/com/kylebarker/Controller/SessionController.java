@@ -114,7 +114,16 @@ public class SessionController {
         if (!cpUid.equals(station.getChargerId())) {
             return "This CP instance is configured as " + station.getChargerId() + ". Request targeted " + cpUid + ".";
         }
-        return station.plugIn(cpUid);
+        try {
+            Map<String, String> payload = Map.of(
+                    "type", "plugIn",
+                    "chargerId", cpUid);
+            kafkaSender.send("CP", payload);
+            station.addMessage("OUT CP: plugIn -> " + cpUid);
+            return "Plug instruction published to CP topic";
+        } catch (Exception e) {
+            return "Failed to publish plug instruction: " + e.getMessage();
+        }
     }
 
     // Simulate unplugging a vehicle
@@ -123,7 +132,16 @@ public class SessionController {
         if (!cpUid.equals(station.getChargerId())) {
             return "This CP instance is configured as " + station.getChargerId() + ". Request targeted " + cpUid + ".";
         }
-        return station.unplug(cpUid);
+        try {
+            Map<String, String> payload = Map.of(
+                    "type", "unplug",
+                    "chargerId", cpUid);
+            kafkaSender.send("CP", payload);
+            station.addMessage("OUT CP: unplug -> " + cpUid);
+            return "Unplug instruction published to CP topic";
+        } catch (Exception e) {
+            return "Failed to publish unplug instruction: " + e.getMessage();
+        }
     }
 
     // Start an authorized charging session

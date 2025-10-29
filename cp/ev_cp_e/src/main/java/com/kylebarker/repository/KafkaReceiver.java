@@ -107,17 +107,13 @@ public class KafkaReceiver {
         // Delegate session creation to the shared ChargingStation so the REST
         // status endpoints reflect the same sessions.
         String startResult = station.startSession(localChargerId, driverId);
-        // startResult contains the session id if created; attempt to plug in
-        // immediately so it transitions to IN_PROGRESS (supplying).
-        try {
-            station.plugIn(localChargerId);
-        } catch (Exception e) {
-            System.err.println("Failed to auto-plug session via ChargingStation: " + e.getMessage());
-        }
-        messageString = "🟢 New charging session created and supplying (via station): " + startResult;
-        // record the outgoing diagnostic and publish
-        station.addMessage("OUT -> charge_requests: " + messageString);
-        kafkaSender.send("charge_requests", messageString);
+        // startResult contains the session id if created. We intentionally DO NOT
+        // auto-plug the session here. The session should remain in HOLD until a
+        // physical plug-in action is performed via the CP UI (which will publish
+        // a plugIn message to the 'CP' topic). This ensures charging only starts
+        // once the vehicle is physically connected.
+        messageString = "🟢 New charging session created (HOLD awaiting plug): " + startResult;
+        station.addMessage(messageString);
     }
 
     private void handleStopCharging() {

@@ -65,8 +65,14 @@ public class ChargingSession {
         if (status.equals("HOLD")) {
             status = "IN_PROGRESS";
             startTime = System.currentTimeMillis();
+            System.out.println("Charger " + chargerId + " plugged in and session started.");
+        } else if (status.equals("PAUSED")) {
+            // resume accounting for paused duration
+            resume();
+            System.out.println("Charger " + chargerId + " re-plugged and session resumed.");
+        } else {
+            System.out.println("Charger " + chargerId + " plugged in.");
         }
-        System.out.println("Charger " + chargerId + " plugged in.");
     }
 
     public void unplug() {

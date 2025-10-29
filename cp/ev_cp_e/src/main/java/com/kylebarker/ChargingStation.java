@@ -73,7 +73,33 @@ public class ChargingStation {
         energyUpdater.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
-                activeSessionsByCharger.values().forEach(ChargingSession::updateEnergy);
+                // Update energy for all sessions and publish telemetry for
+                // sessions that are actively supplying.
+                for (ChargingSession s : activeSessionsByCharger.values()) {
+                    try {
+                        s.updateEnergy();
+                        if ("IN_PROGRESS".equals(s.getStatus()) && s.isChargerConnected()) {
+                            // build a telemetry payload
+                            java.util.Map<String, Object> payload = new java.util.HashMap<>();
+                            payload.put("type", "telemetry");
+                            payload.put("cpUid", chargerId);
+                            payload.put("sessionId", s.getSessionId());
+                            payload.put("driverId", s.getDriverId());
+                            payload.put("energy_kWh", s.getEnergyConsumed());
+                            payload.put("power_kW", s.getPowerKw());
+                            payload.put("cost_eur", s.getTotalCost());
+                            payload.put("timestamp", java.time.Instant.now().toString());
+                            // send to telemetry topic
+                            try {
+                                kafkaSender.send("cp_telemetry", payload);
+                            } catch (Exception ex) {
+                                System.err.println("Failed to send telemetry: " + ex.getMessage());
+                            }
+                        }
+                    } catch (Exception ex) {
+                        System.err.println("Error updating session energy/telemetry: " + ex.getMessage());
+                    }
+                }
             }
         }, 0, 1000);
     }

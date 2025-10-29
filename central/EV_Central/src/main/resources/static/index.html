@@ -19,6 +19,19 @@
     </thead>
     <tbody></tbody>
   </table>
+  <section id="telemetry-panel" class="panel" style="margin-top:16px; display:none;">
+    <h2>Telemetry</h2>
+    <div id="telemetry-selected" class="muted">Select a charger to view live telemetry</div>
+    <div id="telemetry-fields" style="display:none; margin-top:8px;">
+      <div><strong>CP UID:</strong> <span id="t-cp"></span></div>
+      <div><strong>Session:</strong> <span id="t-session"></span></div>
+      <div><strong>Driver:</strong> <span id="t-driver"></span></div>
+      <div><strong>Energy (kWh):</strong> <span id="t-energy"></span></div>
+      <div><strong>Power (kW):</strong> <span id="t-power"></span></div>
+      <div><strong>Cost (€):</strong> <span id="t-cost"></span></div>
+      <div><strong>Last Telemetry:</strong> <span id="t-ts"></span></div>
+    </div>
+  </section>
   <script src="/js/app.js"></script>
 </body>
 </html>

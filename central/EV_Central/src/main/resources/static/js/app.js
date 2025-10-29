@@ -52,11 +52,31 @@ function render(list) {
     </tr>`
     )
     .join("");
+
+  // After rendering, ensure SSE connections exist for visible CPs
+  sorted.forEach((ch) => {
+    const uid = ch.uid;
+    ensureSse(uid);
+  });
+
+  // wire click handlers to rows to select a CP for telemetry
+  tbody.querySelectorAll("tr[data-uid]").forEach((tr) => {
+    tr.addEventListener("click", () => {
+      const uid = tr.getAttribute("data-uid");
+      selectCp(uid);
+      // highlight selection
+      tbody
+        .querySelectorAll("tr")
+        .forEach((r) => r.classList.remove("selected"));
+      tr.classList.add("selected");
+    });
+  });
 }
 
 // Poll every 5 seconds
 load().catch(console.error);
-setInterval(() => load().catch(console.error), 5000);
+// Keep polling the list (for new/removed CPs) every 10s, but telemetry will arrive via SSE
+setInterval(() => load().catch(console.error), 10000);
 
 // Button handlers for start/stop all
 document.addEventListener("DOMContentLoaded", () => {
@@ -114,3 +134,84 @@ fetch("http://192.168.100.100:9900/central/cps")
     console.table(sorted.map((s) => ({ uid: s.uid, state: s.state })));
   })
   .catch(console.error);
+
+// SSE handling: connect to telemetry stream per cpUid and update rows
+const sseMap = new Map();
+
+// currently selected CP for telemetry panel
+let selectedCp = null;
+
+function selectCp(uid) {
+  selectedCp = uid;
+  const panel = document.getElementById("telemetry-panel");
+  const fields = document.getElementById("telemetry-fields");
+  const sel = document.getElementById("telemetry-selected");
+  if (panel) panel.style.display = "block";
+  if (sel) sel.style.display = "none";
+  if (fields) fields.style.display = "block";
+  const tcp = document.getElementById("t-cp");
+  if (tcp) tcp.textContent = uid;
+}
+
+function updateTelemetryPanel(data) {
+  if (!data) return;
+  const setText = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  };
+  setText("t-session", data.sessionId || "-");
+  setText("t-driver", data.driverId || "-");
+  setText(
+    "t-energy",
+    data.energy_kWh != null ? Number(data.energy_kWh).toFixed(3) : "-"
+  );
+  setText(
+    "t-power",
+    data.power_kW != null ? Number(data.power_kW).toFixed(2) : "-"
+  );
+  setText(
+    "t-cost",
+    data.cost_eur != null ? Number(data.cost_eur).toFixed(4) : "-"
+  );
+  setText(
+    "t-ts",
+    data.timestamp ? new Date(data.timestamp).toLocaleString() : "-"
+  );
+}
+
+function ensureSse(uid) {
+  if (!uid) return;
+  if (sseMap.has(uid)) return;
+  try {
+    const src = new EventSource(`${API_BASE}/central/telemetry/stream/${uid}`);
+    src.addEventListener("telemetry", (ev) => {
+      try {
+        const data = JSON.parse(ev.data);
+        // Update row for this uid
+        const row = document.querySelector(`tr[data-uid='${uid}']`);
+        if (row) {
+          const stateCell = row.querySelector(".state");
+          const lastCell = row.querySelector(".last");
+          // map incoming status/state keys if present
+          if (data.state) stateCell.innerHTML = pill(data.state);
+          if (data.timestamp)
+            lastCell.textContent = new Date(data.timestamp).toLocaleString();
+        }
+        // If selected, update telemetry panel
+        if (String(selectedCp) === String(uid)) {
+          updateTelemetryPanel(data);
+        }
+        console.log("Telemetry (SSE)", uid, data);
+      } catch (e) {
+        console.error("Failed to parse SSE telemetry", e);
+      }
+    });
+    src.onerror = (err) => {
+      console.warn("SSE connection error for", uid, err);
+      // leave to browser to attempt reconnection
+    };
+    sseMap.set(uid, src);
+  } catch (e) {
+    console.error("Failed to create SSE for", uid, e);
+  }
+}

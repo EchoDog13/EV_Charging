@@ -173,13 +173,13 @@ async function togglePlug() {
     }
     const j = await r.json();
     const current = j.state || "";
-    if (current === "supplying" || current === "paused") {
+    if (current === "supplying") {
       // currently plugged/supplying -> unplug
       const ru = await fetch(`/cp/${cpUid()}/unplug`, { method: "POST" });
       const txt = await ru.text();
       appendMessage("Action: unplug -> " + txt);
     } else {
-      // otherwise attempt to plug
+      // PAUSED or any other non-supplying state -> attempt to plug (resume/start)
       const rp = await fetch(`/cp/${cpUid()}/plug`, { method: "POST" });
       const txt = await rp.text();
       appendMessage("Action: plug -> " + txt);
