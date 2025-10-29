@@ -3,22 +3,35 @@ spring:
     name: gateway-service
   cloud:
     gateway:
-      discovery:
-        locator:
-          enabled: true # optional – enables /SERVICE/** routing
-
+      routes:
+        - id: charger-service
+          uri: lb://CHARGER-SERVICE-GROUP
+          predicates:
+            - Path=/cp/**
+          filters:
+            - RewritePath=/cp/(?<segment>.*), /\${segment}
+    logging:
+      level:
+        org.springframework.cloud.gateway: DEBUG
+        reactor.netty.http.server: DEBUG
 server:
+  address: 0.0.0.0
   port: 8080
 
 eureka:
   client:
     service-url:
-      defaultZone: http://host.docker.internal:8761/eureka/
+      defaultZone: http://eureka-server:8761/eureka/ # Use container name in alicante network
     register-with-eureka: true
     fetch-registry: true
   instance:
     prefer-ip-address: true
-    ip-address: 192.168.100.50
-    port: 8493 # <-- **external** port
+    ip-address: 192.168.100.50 # Match docker-compose.yml
+    port: 8080 # Internal container port
     metadata-map:
-      management.port: 8493
+      management.port: 8080 # Internal management port
+management:
+  endpoints:
+    web:
+      exposure:
+        include: gateway,health,info # Enable Actuator endpoints

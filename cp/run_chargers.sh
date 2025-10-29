@@ -34,8 +34,8 @@ for i in $(seq 1 $NUM_CHARGERS); do
     MONITOR_HOST_PORT=$((BASE_MONITOR_PORT + i - 1))
     ENGINE_HOST_PORT=$((BASE_ENGINE_PORT + i - 1))
     CURRENT_CHARGER_ID=$((BASE_CHARGER_ID + i - 1))
-    CHARGER_APP_NAME="cp$CURRENT_CHARGER_ID"
-    PROJECT_NAME="cp${i}"
+    CHARGER_APP_NAME="$CURRENT_CHARGER_ID"
+    PROJECT_NAME="${i}"
 
     echo "--- Setting up Charger instance $i (Project: $PROJECT_NAME) ---"
     echo "  CHARGER_ID: $CURRENT_CHARGER_ID"

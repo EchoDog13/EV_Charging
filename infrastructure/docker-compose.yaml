@@ -33,7 +33,8 @@ services:
     ports:
       - "8493:8080"
     networks:
-      - alicante
+      alicante:
+        ipv4_address: 192.168.100.51
     depends_on:
       eureka-server:
         condition: service_healthy
