@@ -30,9 +30,10 @@ public class SessionController {
             return ResponseEntity.status(403).body("This CP instance is configured as " + station.getChargerId()
                     + ". Request targeted " + cpUid + ".");
         }
-        // Return a small JSON payload describing the station
+        // Return a small JSON payload describing the station and state
         return ResponseEntity.ok(Map.of(
                 "chargerId", station.getChargerId(),
+                "state", station.getState(cpUid),
                 "activeSessions", station.getActiveSessionCount()));
     }
 
@@ -40,6 +41,7 @@ public class SessionController {
     @GetMapping("/cp/self")
     public ResponseEntity<?> self() {
         return ResponseEntity.ok(Map.of("chargerId", station.getChargerId()));
+
     }
 
     // Submit a manual charge request from CP UI

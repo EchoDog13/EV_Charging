@@ -7,3 +7,7 @@ button{background:#1f2a44;color:#fff;border:1px solid #334;padding:8px 12px;bord
 button:hover{filter:brightness(1.1)}
 pre{background:#0f172a;border:1px solid #233;padding:10px;border-radius:10px;white-space:pre-wrap;word-break:break-word}
 .muted{opacity:.7;font-size:.9em}
+
+.messages{max-height:260px;overflow:auto;border:1px solid #233;padding:8px;border-radius:8px;background:#071022}
+.message{padding:6px 8px;border-bottom:1px dashed #123;color:#cfe}
+.message:last-child{border-bottom:none}

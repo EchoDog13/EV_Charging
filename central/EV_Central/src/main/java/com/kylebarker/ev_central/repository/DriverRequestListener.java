@@ -37,6 +37,27 @@ public class DriverRequestListener {
             String requestId = json.has("requestId") ? json.get("requestId").asText() : null;
             long driverId = json.has("driverId") ? json.get("driverId").asLong() : -1;
             long cpUid = json.has("cpUid") ? json.get("cpUid").asLong() : -1;
+            String type = json.has("type") ? json.get("type").asText(null) : null;
+
+            // If this is a control message (contains a 'type'), handle certain
+            // control types here. Drivers may emit {"type":"stopCharging", "cpUid":...,
+            // "driverId":...}
+            // to request a stop; forward that to the CP topic immediately.
+            if (type != null) {
+                if ("stopCharging".equals(type)) {
+                    // Forward stop to CP and acknowledge to the requester.
+                    ObjectNodeWrapper payload = new ObjectNodeWrapper();
+                    payload.put("type", "stopCharging");
+                    payload.put("chargerId", String.valueOf(cpUid));
+                    payload.put("driverId", String.valueOf(driverId));
+
+                    kafkaSender.send("CP", payload.toString());
+                    sendResponse(requestId, "ALLOW", "stopping");
+                    return;
+                }
+                // Unknown control types will fall through to validation below
+                // or be ignored by subsequent logic.
+            }
 
             if (cpUid < 0 || driverId < 0) {
                 sendResponse(requestId, "DENY", "invalid_request");

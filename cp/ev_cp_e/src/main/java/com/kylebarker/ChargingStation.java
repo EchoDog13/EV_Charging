@@ -29,6 +29,29 @@ public class ChargingStation {
         return activeSessionsByCharger.size();
     }
 
+    // Return a simple state string for the given charger id.
+    // Maps internal session statuses to friendly states expected by the UI / API.
+    public String getState(String chargerId) {
+        ChargingSession session = activeSessionsByCharger.get(chargerId);
+        if (session == null) {
+            // No active session — treat as available/activated
+            return "activated";
+        }
+        String status = session.getStatus();
+        switch (status) {
+            case "IN_PROGRESS":
+                return "supplying";
+            case "HOLD":
+                return "waiting";
+            case "PAUSED":
+                return "paused";
+            case "COMPLETED":
+                return "completed";
+            default:
+                return status.toLowerCase();
+        }
+    }
+
     public ChargingStation(@Value("${charger.id:}") String configuredChargerId) {
         if (configuredChargerId == null || configuredChargerId.isBlank()) {
             throw new IllegalStateException(
@@ -163,5 +186,18 @@ public class ChargingStation {
             return "No session on charger " + chargerId;
         session.printStatus();
         return "Status printed for charger " + chargerId;
+    }
+
+    // Return the active ChargingSession object for a charger, or null if none.
+    public ChargingSession getActiveSession(String chargerId) {
+        return activeSessionsByCharger.get(chargerId);
+    }
+
+    // Stop all active sessions and remove them.
+    public String stopAll() {
+        activeSessionsByCharger.values().forEach(ChargingSession::end);
+        activeSessionsByCharger.clear();
+        activeSessionsById.clear();
+        return "All sessions stopped.";
     }
 }

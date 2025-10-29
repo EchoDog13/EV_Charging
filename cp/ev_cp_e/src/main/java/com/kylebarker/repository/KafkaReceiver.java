@@ -3,18 +3,26 @@ package com.kylebarker.repository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kylebarker.ChargingSession;
+import com.kylebarker.ChargingStation;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
-
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class KafkaReceiver {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final Map<String, ChargingSession> activeSessions = new ConcurrentHashMap<>();
+
+    @Autowired
+    private ChargingStation station;
+
+    public KafkaReceiver(KafkaSender kafkaSender) {
+        this.kafkaSender = kafkaSender;
+    }
+
+    private final KafkaSender kafkaSender;
 
     // Make the local charger ID configurable via application.properties or
     // environment variable.
@@ -44,7 +52,14 @@ public class KafkaReceiver {
             // ignore (for non-global messages). This prevents accidental creation of
             // sessions on
             // the local charger when the incoming message omitted the field.
-            String chargerId = json.has("chargerId") ? json.get("chargerId").asText(null) : null;
+            // Accept either "chargerId" or the driver/central field name "cpUid" so
+            // external producers that use cpUid still work.
+            String chargerId = null;
+            if (json.has("chargerId")) {
+                chargerId = json.get("chargerId").asText(null);
+            } else if (json.has("cpUid")) {
+                chargerId = json.get("cpUid").asText(null);
+            }
             String driverId = json.path("driverId").asText("unknown");
 
             // global pause/resume messages have no charger ID, so skip check
@@ -82,165 +97,93 @@ public class KafkaReceiver {
     // === INDIVIDUAL CHARGER CONTROLS ===
 
     private void handleStartCharging(String driverId) {
-        if (activeSessions.values().stream()
-                .anyMatch(s -> s.getChargerId().equals(localChargerId)
-                        && !s.getStatus().equals("COMPLETED"))) {
-            System.out.println("⚠️ Charger " + localChargerId + " already in use. Rejecting new session.");
-            return;
-        }
 
-        ChargingSession session = new ChargingSession(localChargerId, driverId);
-        activeSessions.put(session.getSessionId(), session);
-        System.out.println("🟢 New charging session created: " + session.getSessionId());
+        String messageString;
+        // Delegate session creation to the shared ChargingStation so the REST
+        // status endpoints reflect the same sessions.
+        String startResult = station.startSession(localChargerId, driverId);
+        // startResult contains the session id if created; attempt to plug in
+        // immediately so it transitions to IN_PROGRESS (supplying).
+        try {
+            station.plugIn(localChargerId);
+        } catch (Exception e) {
+            System.err.println("Failed to auto-plug session via ChargingStation: " + e.getMessage());
+        }
+        messageString = "🟢 New charging session created and supplying (via station): " + startResult;
+        kafkaSender.send("charge_requests", messageString);
     }
 
     private void handleStopCharging() {
-        activeSessions.values().forEach(session -> {
-            if (session.getChargerId().equals(localChargerId)
-                    && !session.getStatus().equals("COMPLETED")) {
-                session.end();
-            }
-        });
+        station.stopSession(localChargerId);
     }
 
     private void handlePlugIn() {
-        activeSessions.values().forEach(session -> {
-            if (session.getChargerId().equals(localChargerId)
-                    && session.getStatus().equals("WAITING_FOR_PLUG")) {
-                session.plugIn();
-            }
-        });
+        station.plugIn(localChargerId);
     }
 
     private void handleUnplug() {
-        activeSessions.values().forEach(session -> {
-            if (session.getChargerId().equals(localChargerId)
-                    && !session.getStatus().equals("COMPLETED")) {
-                session.unplug();
-            }
-        });
+        station.unplug(localChargerId);
     }
 
     private void handlePause() {
-        activeSessions.values().forEach(session -> {
-            if (session.getChargerId().equals(localChargerId)
-                    && session.getStatus().equals("IN_PROGRESS")) {
-                session.pause();
-            }
-        });
+        station.pause(localChargerId);
     }
 
     private void handleResume() {
-        activeSessions.values().forEach(session -> {
-            if (session.getChargerId().equals(localChargerId)
-                    && session.getStatus().equals("PAUSED")) {
-                session.resume();
-            }
-        });
+        station.resume(localChargerId);
     }
 
     // === GLOBAL CONTROLS ===
 
     private void pauseAllSessions() {
         System.out.println("⏸ Pausing all sessions...");
-        activeSessions.values().forEach(ChargingSession::pause);
+        station.pauseAll();
     }
 
     private void resumeAllSessions() {
         System.out.println("▶️ Resuming all sessions...");
-        activeSessions.values().forEach(ChargingSession::resume);
+        station.resumeAll();
     }
 
     private void handleStopAll() {
         System.out.println(
                 "⏹ Stop all received: stopping all non-completed sessions (paused sessions will not be resumed)...");
-
-        // End any session that isn't already completed. Do NOT resume paused sessions
-        // first —
-        // stopAll should immediately request sessions to end, regardless of their
-        // current
-        // paused state. Resuming should only happen on startAll.
-        activeSessions.values().forEach(session -> {
-            try {
-                if (!"COMPLETED".equals(session.getStatus())) {
-                    session.end();
-                }
-            } catch (Exception e) {
-                System.err.println("Failed to stop session " + session.getSessionId() + ": " + e.getMessage());
-            }
-        });
-
-        // Remove completed sessions from the map
-        try {
-            activeSessions.entrySet().removeIf(entry -> "COMPLETED".equals(entry.getValue().getStatus()));
-        } catch (Exception e) {
-            // Fallback: iterate keys and remove
-            activeSessions.keySet().removeIf(key -> {
-                ChargingSession s = activeSessions.get(key);
-                return s != null && "COMPLETED".equals(s.getStatus());
-            });
-        }
+        station.stopAll();
     }
 
     private void printStatus() {
-        activeSessions.values().forEach(s -> System.out.println("ℹ️ " + s.getSessionInfo()));
+        ChargingSession s = station.getActiveSession(localChargerId);
+        if (s != null)
+            System.out.println("ℹ️ " + s.getSessionInfo());
     }
 
     public String apiStartSession(String chargerId, String driverId) {
-        if (activeSessions.values().stream().anyMatch(s -> s.getChargerId().equals(chargerId)
-                && !"COMPLETED".equals(s.getStatus()))) {
-            return "❌ Charger " + chargerId + " already in use.";
-        }
-        ChargingSession session = new ChargingSession(chargerId, driverId);
-        activeSessions.put(session.getSessionId(), session);
-        return "✅ Session started for charger " + chargerId + " (waiting for plug)";
+        // Delegate to ChargingStation which enforces one session per charger
+        return station.startSession(chargerId, driverId);
     }
 
     public String apiStopSession(String chargerId) {
-        ChargingSession session = getSessionByCharger(chargerId);
-        if (session == null)
-            return "⚠️ No active session for " + chargerId;
-        session.end();
-        activeSessions.remove(session.getSessionId());
-        return "🛑 Session stopped for " + chargerId + ". Energy: " +
-                String.format("%.3f", session.getEnergyConsumed()) + " kWh, cost $" +
-                String.format("%.2f", session.getTotalCost());
+        return station.stopSession(chargerId);
     }
 
     public String apiPlugIn(String chargerId) {
-        ChargingSession session = getSessionByCharger(chargerId);
-        if (session == null)
-            return "⚠️ No session found for " + chargerId;
-        session.plugIn();
-        return "🔌 Charger " + chargerId + " plugged in.";
+        return station.plugIn(chargerId);
     }
 
     public String apiUnplug(String chargerId) {
-        ChargingSession session = getSessionByCharger(chargerId);
-        if (session == null)
-            return "⚠️ No session found for " + chargerId;
-        session.unplug();
-        return "🔌 Charger " + chargerId + " unplugged.";
+        return station.unplug(chargerId);
     }
 
     public String apiPause(String chargerId) {
-        ChargingSession session = getSessionByCharger(chargerId);
-        if (session == null)
-            return "⚠️ No session found for " + chargerId;
-        session.pause();
-        return "⏸️ Charger " + chargerId + " paused.";
+        return station.pause(chargerId);
     }
 
     public String apiResume(String chargerId) {
-        ChargingSession session = getSessionByCharger(chargerId);
-        if (session == null)
-            return "⚠️ No session found for " + chargerId;
-        session.resume();
-        return "▶️ Charger " + chargerId + " resumed.";
+        return station.resume(chargerId);
     }
 
     public String apiStatus(String chargerId) {
-        ChargingSession session = getSessionByCharger(chargerId);
+        ChargingSession session = station.getActiveSession(chargerId);
         if (session == null)
             return "ℹ️ Charger " + chargerId + " idle.";
         return String.format(
@@ -249,11 +192,5 @@ public class KafkaReceiver {
                 session.getTotalCost(), session.isChargerConnected());
     }
 
-    // --- Helper ---
-    private ChargingSession getSessionByCharger(String chargerId) {
-        return activeSessions.values().stream()
-                .filter(s -> s.getChargerId().equals(chargerId))
-                .findFirst()
-                .orElse(null);
-    }
+    // --- end ---
 }
