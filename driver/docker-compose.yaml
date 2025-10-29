@@ -6,6 +6,8 @@ services:
       context: ./EV_Driver
       dockerfile: dockerfile
     container_name: ev-driver
+    ports:
+      - "7040:8080"
     image: ev_driver:latest
     networks:
       alicante: 

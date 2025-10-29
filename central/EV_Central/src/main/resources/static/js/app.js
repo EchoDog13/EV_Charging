@@ -17,7 +17,30 @@ async function load() {
 }
 
 function render(list) {
-  tbody.innerHTML = list
+  // Sort by requested state priority: charging, paused, activated, stopped, disconnected
+  const priority = {
+    SUPPLYING: 0, // corresponds to 'charging'
+    PAUSED: 1, // not present in current enum but keep for future
+    ACTIVATED: 2,
+    STOPPED: 3,
+    DISCONNECTED: 4,
+    OUT_OF_ORDER: 5,
+  };
+  const sorted = [...list].sort((a, b) => {
+    const sa = (a.state || "").toUpperCase();
+    const sb = (b.state || "").toUpperCase();
+    const pa = Object.prototype.hasOwnProperty.call(priority, sa)
+      ? priority[sa]
+      : 99;
+    const pb = Object.prototype.hasOwnProperty.call(priority, sb)
+      ? priority[sb]
+      : 99;
+    if (pa !== pb) return pa - pb;
+    // Tie-breaker: by uid if same priority
+    return (a.uid ?? 0) - (b.uid ?? 0);
+  });
+
+  tbody.innerHTML = sorted
     .map(
       (ch) => `
     <tr data-uid="${ch.uid}">
@@ -66,3 +89,28 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 });
+
+fetch("http://192.168.100.100:9900/central/cps")
+  .then((r) => r.json())
+  .then((list) => {
+    const priority = {
+      charging: 0,
+      paused: 1,
+      activated: 2,
+      stopped: 3,
+      disconnected: 4,
+    };
+    const sorted = [...list].sort((a, b) => {
+      const sa = (a.state || "").toLowerCase(),
+        sb = (b.state || "").toLowerCase();
+      const pa = Object.prototype.hasOwnProperty.call(priority, sa)
+        ? priority[sa]
+        : 99;
+      const pb = Object.prototype.hasOwnProperty.call(priority, sb)
+        ? priority[sb]
+        : 99;
+      return pa !== pb ? pa - pb : (a.uid || 0) - (b.uid || 0);
+    });
+    console.table(sorted.map((s) => ({ uid: s.uid, state: s.state })));
+  })
+  .catch(console.error);
