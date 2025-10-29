@@ -10,7 +10,8 @@ function fmt(ts) {
 }
 
 async function load() {
-  const res = await fetch({ API_BASE } + "/chargers/cps");
+  const res = await fetch(API_BASE + "/central/cps");
+  if (!res.ok) throw new Error("Fetch failed: " + res.status);
   const data = await res.json();
   render(data);
 }
@@ -30,16 +31,6 @@ function render(list) {
     .join("");
 }
 
-const es = new EventSource("/api/stream");
-es.addEventListener("charger", (ev) => {
-  const ch = JSON.parse(ev.data);
-  const tr = tbody.querySelector(`tr[data-uid="${ch.uid}"]`);
-  if (tr) {
-    tr.querySelector(".state").innerHTML = pill(ch.state);
-    tr.querySelector(".last").textContent = fmt(ch.lastHealthCheck);
-  } else {
-    load();
-  }
-});
-
-load();
+// Poll every 5 seconds
+load().catch(console.error);
+setInterval(() => load().catch(console.error), 5000);
