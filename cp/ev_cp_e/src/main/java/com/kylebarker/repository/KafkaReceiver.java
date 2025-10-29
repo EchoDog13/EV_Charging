@@ -36,6 +36,11 @@ public class KafkaReceiver {
     @KafkaListener(topics = "CP", groupId = "ev_central_group")
     public void listen(String message) {
         System.out.println("Received message: " + message);
+        // Keep a local record for the UI to read
+        try {
+            station.addMessage("RECV CP: " + message);
+        } catch (Exception ignored) {
+        }
         try {
             JsonNode json = objectMapper.readTree(message);
             // Some producers (or accidental string-wrapping in Kafka messages) send
@@ -110,26 +115,33 @@ public class KafkaReceiver {
             System.err.println("Failed to auto-plug session via ChargingStation: " + e.getMessage());
         }
         messageString = "🟢 New charging session created and supplying (via station): " + startResult;
+        // record the outgoing diagnostic and publish
+        station.addMessage("OUT -> charge_requests: " + messageString);
         kafkaSender.send("charge_requests", messageString);
     }
 
     private void handleStopCharging() {
+        station.addMessage("INSTRUCT stopSession: " + localChargerId);
         station.stopSession(localChargerId);
     }
 
     private void handlePlugIn() {
+        station.addMessage("INSTRUCT plugIn: " + localChargerId);
         station.plugIn(localChargerId);
     }
 
     private void handleUnplug() {
+        station.addMessage("INSTRUCT unplug: " + localChargerId);
         station.unplug(localChargerId);
     }
 
     private void handlePause() {
+        station.addMessage("INSTRUCT pause: " + localChargerId);
         station.pause(localChargerId);
     }
 
     private void handleResume() {
+        station.addMessage("INSTRUCT resume: " + localChargerId);
         station.resume(localChargerId);
     }
 

@@ -3,6 +3,7 @@ const cpUid = () => q("#cpUid").value.trim();
 let simInterval = null;
 let msgInterval = null;
 const maxMessages = 50;
+let lastStateSeen = null;
 
 async function load() {
   try {
@@ -15,15 +16,16 @@ async function load() {
 }
 
 function appendMessage(text) {
-  const container = q('#messages');
+  const container = q("#messages");
   if (!container) return;
-  if (container.textContent === 'No messages yet.') container.textContent = '';
-  const el = document.createElement('div');
-  el.className = 'message';
-  el.textContent = (new Date()).toLocaleTimeString() + ' — ' + text;
+  if (container.textContent === "No messages yet.") container.textContent = "";
+  const el = document.createElement("div");
+  el.className = "message";
+  el.textContent = new Date().toLocaleTimeString() + " — " + text;
   container.prepend(el);
   // Trim messages
-  while (container.children.length > maxMessages) container.removeChild(container.lastChild);
+  while (container.children.length > maxMessages)
+    container.removeChild(container.lastChild);
 }
 
 async function pollMessages() {
@@ -33,7 +35,22 @@ async function pollMessages() {
     if (r.status === 200) {
       const arr = await r.json();
       if (Array.isArray(arr)) {
-        arr.reverse().forEach(m => appendMessage(typeof m === 'string' ? m : JSON.stringify(m)));
+        // Render snapshot: replace current contents with the server-provided
+        // messages to avoid duplicates across polls.
+        const container = q("#messages");
+        if (!container) return;
+        container.textContent = "";
+        // Server returns newest-first; render in that order so latest appears on top
+        arr.forEach((m) => {
+          const text = typeof m === "string" ? m : JSON.stringify(m);
+          const el = document.createElement("div");
+          el.className = "message";
+          el.textContent = new Date().toLocaleTimeString() + " — " + text;
+          container.appendChild(el);
+        });
+        // Trim to maxMessages if server returned more
+        while (container.children.length > maxMessages)
+          container.removeChild(container.lastChild);
         return;
       }
     }
@@ -46,7 +63,11 @@ async function pollMessages() {
     const r2 = await fetch(`/api/cp/${encodeURIComponent(cpUid())}/state`);
     if (r2.ok) {
       const j = await r2.json();
-      appendMessage('State: ' + (j.state || JSON.stringify(j)));
+      const newState = j.state || JSON.stringify(j);
+      if (newState !== lastStateSeen) {
+        appendMessage("State: " + newState);
+        lastStateSeen = newState;
+      }
     }
   } catch (e) {
     // noop
@@ -92,8 +113,17 @@ function stopSim() {
   }
 }
 
-q("#btnLoad").onclick = load;
-q('#btnClear').onclick = () => { const c = q('#messages'); if (c) c.textContent = 'No messages yet.'; };
+q("#btnLoad").onclick = () => {
+  lastStateSeen = null;
+  const c = q("#messages");
+  if (c) c.textContent = "No messages yet.";
+  load();
+};
+q("#btnClear").onclick = () => {
+  lastStateSeen = null;
+  const c = q("#messages");
+  if (c) c.textContent = "No messages yet.";
+};
 load();
 
 // Start polling messages every 2s

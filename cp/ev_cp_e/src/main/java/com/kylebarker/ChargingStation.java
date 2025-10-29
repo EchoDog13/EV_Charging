@@ -7,6 +7,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.List;
 
 @Component
 public class ChargingStation {
@@ -14,6 +18,8 @@ public class ChargingStation {
     private final Map<String, ChargingSession> activeSessionsByCharger = new ConcurrentHashMap<>();
     private final Map<String, ChargingSession> activeSessionsById = new ConcurrentHashMap<>();
     private final Timer energyUpdater = new Timer(true);
+    // In-memory recent message buffer (Kafka messages / diagnostics) for UI
+    private final Deque<String> recentMessages = new ConcurrentLinkedDeque<>();
 
     private final String chargerId;
 
@@ -67,6 +73,22 @@ public class ChargingStation {
                 activeSessionsByCharger.values().forEach(ChargingSession::updateEnergy);
             }
         }, 0, 1000);
+    }
+
+    // Add a textual message to the local buffer (newest first). Keeps up to
+    // 100 messages.
+    public void addMessage(String message) {
+        if (message == null)
+            return;
+        recentMessages.addFirst(message);
+        while (recentMessages.size() > 100) {
+            recentMessages.removeLast();
+        }
+    }
+
+    // Return the recent messages as a list (newest first)
+    public List<String> getRecentMessages() {
+        return new ArrayList<>(recentMessages);
     }
 
     // Update local state of the charging point

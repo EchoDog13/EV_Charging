@@ -37,6 +37,16 @@ public class SessionController {
                 "activeSessions", station.getActiveSessionCount()));
     }
 
+    // Return recent messages captured by this CP instance for UI diagnostics
+    @GetMapping("/api/cp/{cpUid}/messages")
+    public ResponseEntity<?> getMessages(@PathVariable String cpUid) {
+        if (!cpUid.equals(station.getChargerId())) {
+            return ResponseEntity.status(403).body("This CP instance is configured as " + station.getChargerId()
+                    + ". Request targeted " + cpUid + ".");
+        }
+        return ResponseEntity.ok(station.getRecentMessages());
+    }
+
     // Return the configured charger id for this instance
     @GetMapping("/cp/self")
     public ResponseEntity<?> self() {
