@@ -1,11 +1,13 @@
 package com.kylebarker.Controller;
 
 import com.kylebarker.ChargingStation;
+import com.kylebarker.repository.KafkaSender;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @RestController
 @RequestMapping("")
@@ -13,6 +15,9 @@ public class SessionController {
 
     @Autowired
     private ChargingStation station;
+
+    @Autowired
+    private KafkaSender kafkaSender;
 
     // Update local state of the charging point
     @PostMapping("/cp/{cpUid}/state")
@@ -31,10 +36,28 @@ public class SessionController {
                     + ". Request targeted " + cpUid + ".");
         }
         // Return a small JSON payload describing the station and state
-        return ResponseEntity.ok(Map.of(
+        String state = station.getState(cpUid);
+        Map<String, Object> base = Map.of(
                 "chargerId", station.getChargerId(),
-                "state", station.getState(cpUid),
-                "activeSessions", station.getActiveSessionCount()));
+                "state", state,
+                "activeSessions", station.getActiveSessionCount());
+
+        // If supplying, include live telemetry and driver id
+        if ("supplying".equals(state)) {
+            var session = station.getActiveSession(cpUid);
+            if (session != null) {
+                Map<String, Object> supplyDetails = Map.of(
+                        "driverId", session.getDriverId(),
+                        "energy_kWh", session.getEnergyConsumed(),
+                        "cost_eur", session.getTotalCost(),
+                        "power_kW", session.getPowerKw());
+                // Merge base map and supplyDetails
+                var merged = new java.util.HashMap<String, Object>(base);
+                merged.putAll(supplyDetails);
+                return ResponseEntity.ok(merged);
+            }
+        }
+        return ResponseEntity.ok(base);
     }
 
     // Return recent messages captured by this CP instance for UI diagnostics
@@ -60,7 +83,29 @@ public class SessionController {
         if (!cpUid.equals(station.getChargerId())) {
             return "This CP instance is configured as " + station.getChargerId() + ". Request targeted " + cpUid + ".";
         }
-        return station.startSession(cpUid, driverId); // Using startSession for manual requests
+        // Build a startCharging request expected by central and send as an object
+        try {
+            Map<String, String> payload = Map.of(
+                    "type", "startCharging",
+                    "cpUid", cpUid,
+                    "driverId", driverId);
+            // Send the payload as an object so the Kafka JSON serializer writes
+            // a JSON object rather than a quoted string.
+            kafkaSender.send("charge_requests", payload);
+            // Serialize for UI/logging
+            ObjectMapper mapper = new ObjectMapper();
+            String msg = mapper.writeValueAsString(payload);
+            station.addMessage("OUT CP->central: " + msg);
+            return "Charge request published: " + msg;
+        } catch (Exception e) {
+            return "Failed to publish charge request: " + e.getMessage();
+        }
+    }
+
+    private String escape(String s) {
+        if (s == null)
+            return "";
+        return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     // Simulate plugging in a vehicle

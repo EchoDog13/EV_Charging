@@ -7,12 +7,45 @@ let lastStateSeen = null;
 
 async function load() {
   try {
-    const r = await fetch(`/api/cp/${cpUid()}/state`);
+    const r = await fetch(`/cp/${cpUid()}/state`);
     const j = await r.json();
     q("#output").textContent = JSON.stringify(j, null, 2);
+    updateStatusBadge(j.state);
   } catch (e) {
     q("#output").textContent = "Error loading: " + e.message;
   }
+}
+
+function updateStatusBadge(state) {
+  const el = q("#statusBadge");
+  if (!el) return;
+  const s = (state || "unknown").toLowerCase();
+  // Normalize spaces and special names
+  let cls = s.replace(/\s+/g, "_");
+  el.className = "status " + cls;
+  // If the state object contains more details (when load() added them),
+  // display an informative label for supplying
+  try {
+    if (s === "supplying") {
+      // attempt to fetch more details from the last loaded output
+      const out = q("#output").textContent;
+      if (out && out !== "—") {
+        const j = JSON.parse(out);
+        const energy =
+          j.energy_kWh !== undefined
+            ? Number(j.energy_kWh).toFixed(3) + " kWh"
+            : "";
+        const cost =
+          j.cost_eur !== undefined ? "€" + Number(j.cost_eur).toFixed(2) : "";
+        const driver = j.driverId ? "Driver: " + j.driverId : "";
+        el.textContent = `Supplying — ${energy} ${cost} ${driver}`;
+        return;
+      }
+    }
+  } catch (e) {
+    // fallback to simple label
+  }
+  el.textContent = state ? state : "—";
 }
 
 function appendMessage(text) {
@@ -51,6 +84,17 @@ async function pollMessages() {
         // Trim to maxMessages if server returned more
         while (container.children.length > maxMessages)
           container.removeChild(container.lastChild);
+        // Also refresh the CP state so the status badge stays up-to-date
+        try {
+          const rs = await fetch(`/cp/${encodeURIComponent(cpUid())}/state`);
+          if (rs.ok) {
+            const js = await rs.json();
+            updateStatusBadge(js.state);
+            lastStateSeen = js.state || lastStateSeen;
+          }
+        } catch (e) {
+          // ignore state refresh errors
+        }
         return;
       }
     }
@@ -60,13 +104,14 @@ async function pollMessages() {
 
   // Fallback: poll state and show a short note when state changes
   try {
-    const r2 = await fetch(`/api/cp/${encodeURIComponent(cpUid())}/state`);
+    const r2 = await fetch(`/cp/${encodeURIComponent(cpUid())}/state`);
     if (r2.ok) {
       const j = await r2.json();
       const newState = j.state || JSON.stringify(j);
       if (newState !== lastStateSeen) {
         appendMessage("State: " + newState);
         lastStateSeen = newState;
+        updateStatusBadge(newState);
       }
     }
   } catch (e) {
@@ -76,27 +121,75 @@ async function pollMessages() {
 
 async function startSession() {
   // create a manual charge request for this CP via central/authorize-like endpoint
-  const res = await fetch(`/api/cp/${cpUid()}/charge-requests?driverId=10`, {
-    method: "POST",
-  });
+  const driver = q("#driverId") ? q("#driverId").value.trim() : "10";
+  const res = await fetch(
+    `/cp/${cpUid()}/charge-requests?driverId=${encodeURIComponent(driver)}`,
+    {
+      method: "POST",
+    }
+  );
   const data = await res.json().catch(() => ({}));
   q("#output").textContent =
     "Session started:\n" + JSON.stringify(data, null, 2);
 }
 
 async function stopSession() {
-  await fetch(`/api/cp/session/${cpUid()}/stop`, { method: "POST" });
-  q("#output").textContent = "Session stopped.";
-}
-
-async function sendTelemetry() {
-  // send telemetry by charger id (UI-friendly)
-  const energy = Math.random() * 20 + 5;
-  const power = Math.random() * 10 + 2;
-  await fetch(`/api/cp/${cpUid()}/telemetry?kWh=${energy}&power=${power}`, {
+  const driver = q("#driverId") ? q("#driverId").value.trim() : "10";
+  const btn = q("#btnRequestCharge");
+  if (btn) btn.disabled = true;
+  try {
+    // create a manual charge request for this CP via central/authorize-like endpoint
+    const res = await fetch(
+      `/cp/${cpUid()}/charge-requests?driverId=${encodeURIComponent(driver)}`,
+      {
+        method: "POST",
+      }
+    );
+    const text = await res.text();
+    q("#output").textContent = "Charge request response:\n" + text;
+    appendMessage("OUT CP->central request: " + text);
+    // refresh state and messages to reflect any immediate changes
+    await load();
+    await pollMessages();
+  } catch (e) {
+    q("#output").textContent = "Charge request failed: " + e.message;
+    appendMessage("Charge request error: " + e.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+  await fetch(`/cp/${cpUid()}/telemetry?kWh=${energy}&power=${power}`, {
     method: "POST",
   });
   q("#output").textContent = "Telemetry sent.";
+}
+
+async function togglePlug() {
+  try {
+    // Read current state
+    const r = await fetch(`/cp/${cpUid()}/state`);
+    if (!r.ok) {
+      appendMessage("Failed to read state");
+      return;
+    }
+    const j = await r.json();
+    const current = j.state || "";
+    if (current === "supplying" || current === "paused") {
+      // currently plugged/supplying -> unplug
+      const ru = await fetch(`/cp/${cpUid()}/unplug`, { method: "POST" });
+      const txt = await ru.text();
+      appendMessage("Action: unplug -> " + txt);
+    } else {
+      // otherwise attempt to plug
+      const rp = await fetch(`/cp/${cpUid()}/plug`, { method: "POST" });
+      const txt = await rp.text();
+      appendMessage("Action: plug -> " + txt);
+    }
+    // refresh state and messages immediately
+    await load();
+    await pollMessages();
+  } catch (e) {
+    appendMessage("togglePlug error: " + e.message);
+  }
 }
 
 function simulate() {
@@ -124,6 +217,8 @@ q("#btnClear").onclick = () => {
   const c = q("#messages");
   if (c) c.textContent = "No messages yet.";
 };
+// Attach request charge button
+if (q("#btnRequestCharge")) q("#btnRequestCharge").onclick = startSession;
 load();
 
 // Start polling messages every 2s

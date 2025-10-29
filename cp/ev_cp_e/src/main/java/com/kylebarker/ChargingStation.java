@@ -2,6 +2,7 @@ package com.kylebarker;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import com.kylebarker.repository.KafkaSender;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
@@ -22,6 +23,7 @@ public class ChargingStation {
     private final Deque<String> recentMessages = new ConcurrentLinkedDeque<>();
 
     private final String chargerId;
+    private final KafkaSender kafkaSender;
 
     // Charger ID is now required to be supplied via configuration; no
     // auto-generation.
@@ -58,12 +60,13 @@ public class ChargingStation {
         }
     }
 
-    public ChargingStation(@Value("${charger.id:}") String configuredChargerId) {
+    public ChargingStation(@Value("${charger.id:}") String configuredChargerId, KafkaSender kafkaSender) {
         if (configuredChargerId == null || configuredChargerId.isBlank()) {
             throw new IllegalStateException(
                     "Required property 'charger.id' is missing or blank. Set via -Dcharger.id=... or CHARGER_ID env.");
         }
         this.chargerId = configuredChargerId;
+        this.kafkaSender = kafkaSender;
 
         System.out.println("Charging Station started with ID: " + chargerId + " (configured)");
 
@@ -133,6 +136,8 @@ public class ChargingStation {
         if (session == null)
             return "No active session on charger " + chargerId;
         session.end();
+        // publish a receipt for the completed session
+        publishReceipt(session);
         activeSessionsByCharger.remove(chargerId);
         activeSessionsById.remove(session.getSessionId());
         return "Session stopped: " + session.getSessionId();
@@ -217,9 +222,45 @@ public class ChargingStation {
 
     // Stop all active sessions and remove them.
     public String stopAll() {
-        activeSessionsByCharger.values().forEach(ChargingSession::end);
+        List<ChargingSession> sessions = new ArrayList<>(activeSessionsByCharger.values());
+        for (ChargingSession s : sessions) {
+            s.end();
+            publishReceipt(s);
+        }
         activeSessionsByCharger.clear();
         activeSessionsById.clear();
         return "All sessions stopped.";
+    }
+
+    // Build and publish a simple JSON receipt to the broker and record in the
+    // recent message buffer for UI visibility.
+    private void publishReceipt(ChargingSession session) {
+        if (session == null || kafkaSender == null)
+            return;
+        try {
+            // Ensure energy is up to date
+            session.updateEnergy();
+            StringBuilder sb = new StringBuilder();
+            sb.append('{');
+            sb.append("\"type\":\"receipt\"");
+            sb.append(',').append("\"sessionId\":\"").append(escape(session.getSessionId())).append('\"');
+            sb.append(',').append("\"chargerId\":\"").append(escape(session.getChargerId())).append('\"');
+            sb.append(',').append("\"driverId\":\"").append(escape(session.getDriverId())).append('\"');
+            sb.append(',').append("\"energy_kWh\":").append(String.format("%.6f", session.getEnergyConsumed()));
+            sb.append(',').append("\"cost_eur\":").append(String.format("%.2f", session.getTotalCost()));
+            sb.append('}');
+
+            String msg = sb.toString();
+            kafkaSender.send("charge_responses", msg);
+            addMessage("OUT Receipt: " + msg);
+        } catch (Exception e) {
+            System.err.println("Failed to publish receipt: " + e.getMessage());
+        }
+    }
+
+    private String escape(String s) {
+        if (s == null)
+            return "";
+        return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }

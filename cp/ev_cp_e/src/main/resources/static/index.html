@@ -14,6 +14,7 @@
     <div class="row">
       <label>CP UID:</label>
       <input id="cpUid" value="CP101"/>
+      <span id="statusBadge" class="status unknown">—</span>
       <button id="btnLoad">Load Session</button>
     </div>
     <pre id="output">—</pre>
@@ -27,7 +28,23 @@
     </div>
   </section>
 
-  <!-- Charging controls and simulation removed (not used) -->
+  <section class="card">
+    <h2>Plug / Unplug</h2>
+    <div class="row">
+      <button id="btnTogglePlug" onclick="togglePlug()">Plug / Unplug</button>
+    </div>
+    <div class="muted">Toggles between plugged (supplying) and unplugged states based on current CP state.</div>
+  </section>
+
+  <section class="card">
+    <h2>Request Charging</h2>
+    <div class="row">
+      <label>Driver ID:</label>
+      <input id="driverId" value="10" />
+      <button id="btnRequestCharge">Request Charge</button>
+    </div>
+    <div class="muted">Sends a startCharging request to central for authorization.</div>
+  </section>
 
   <script src="/js/app.js"></script>
 </body>

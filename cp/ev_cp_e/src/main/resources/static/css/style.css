@@ -11,3 +11,11 @@ pre{background:#0f172a;border:1px solid #233;padding:10px;border-radius:10px;whi
 .messages{max-height:260px;overflow:auto;border:1px solid #233;padding:8px;border-radius:8px;background:#071022}
 .message{padding:6px 8px;border-bottom:1px dashed #123;color:#cfe}
 .message:last-child{border-bottom:none}
+
+.status{display:inline-block;padding:6px 10px;border-radius:999px;font-weight:600;margin-left:8px}
+.status.unknown{background:#444;color:#ddd}
+.status.activated{background:#1f8a3a;color:#ffffff} /* green - Available */
+.status.stopped{background:#ff8c00;color:#ffffff} /* orange - Out of Order (deliberate) */
+.status.supplying{background:#1f8a3a;color:#ffffff} /* green - Supplying (show details) */
+.status.out_of_order{background:#b22222;color:#ffffff} /* red - Fault */
+.status.disconnected{background:#888888;color:#ffffff} /* gray - disconnected */

@@ -56,6 +56,10 @@ public class ChargingSession {
         return getEnergyConsumed() * costPerKWh;
     }
 
+    public double getPowerKw() {
+        return powerKw;
+    }
+
     public void plugIn() {
         chargerConnected = true;
         if (status.equals("HOLD")) {
