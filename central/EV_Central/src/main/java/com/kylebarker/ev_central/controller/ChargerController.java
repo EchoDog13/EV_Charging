@@ -3,6 +3,7 @@ package com.kylebarker.ev_central.controller;
 import com.kylebarker.ev_central.model.Charger;
 import com.kylebarker.ev_central.repository.ChargerRepository;
 import com.kylebarker.ev_central.repository.KafkaSender;
+import com.kylebarker.ev_central.repository.CpTelemetryListener;
 
 import org.json.JSONObject;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -27,6 +28,7 @@ public class ChargerController {
 
     private final ChargerRepository repository;
     private final KafkaSender kafkaSender;
+    private final CpTelemetryListener telemetryListener;
 
     // In-memory stores for demo purposes
     private final Map<String, JSONObject> chargeRequests = new ConcurrentHashMap<>();
@@ -34,14 +36,58 @@ public class ChargerController {
     private final Map<String, JSONObject> tickets = new ConcurrentHashMap<>();
     private final Map<String, JSONObject> messages = new ConcurrentHashMap<>();
 
-    public ChargerController(ChargerRepository repository, KafkaSender kafkaSender) {
+    public ChargerController(ChargerRepository repository, KafkaSender kafkaSender,
+            CpTelemetryListener telemetryListener) {
         this.repository = repository;
         this.kafkaSender = kafkaSender;
+        this.telemetryListener = telemetryListener;
     }
 
     @GetMapping("/cps")
     public List<Charger> getAllChargers() {
-        return repository.findAll();
+        // Enrich persisted charger info with any recent telemetry so the dashboard
+        // reflects up-to-date state (avoids SSE-updated DOM being overwritten by
+        // stale DB values on the next poll).
+        List<Charger> chargers = repository.findAll();
+        for (Charger c : chargers) {
+            try {
+                String uid = String.valueOf(c.getUid());
+                Map<String, Object> last = telemetryListener.getLatestFor(uid);
+                if (last != null) {
+                    // map may contain timestamp (number or string)
+                    Object ts = last.get("timestamp");
+                    if (ts == null)
+                        ts = last.get("time");
+                    if (ts != null) {
+                        try {
+                            long l = 0L;
+                            if (ts instanceof Number)
+                                l = ((Number) ts).longValue();
+                            else
+                                l = Long.parseLong(String.valueOf(ts));
+                            c.setLastHealthCheck(l);
+                        } catch (Exception ignore) {
+                        }
+                    }
+                    // prefer explicit state from telemetry, otherwise treat telemetry
+                    // presence as SUPPLYING
+                    Object st = last.get("state");
+                    if (st != null) {
+                        try {
+                            c.setState(com.kylebarker.ev_central.model.chargerState
+                                    .valueOf(String.valueOf(st).toUpperCase()));
+                        } catch (IllegalArgumentException ignore) {
+                        }
+                    } else if (last.get("sessionId") != null || last.get("energy_kWh") != null
+                            || last.get("power_kW") != null) {
+                        c.setState(com.kylebarker.ev_central.model.chargerState.SUPPLYING);
+                    }
+                }
+            } catch (Exception ex) {
+                // ignore enrichment failures per device
+            }
+        }
+        return chargers;
     }
 
     @GetMapping("/cps/{cpUid}")
