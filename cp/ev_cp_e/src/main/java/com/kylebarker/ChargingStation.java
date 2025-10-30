@@ -182,8 +182,14 @@ public class ChargingStation {
         ChargingSession session = activeSessionsByCharger.get(chargerId);
         if (session == null)
             return "No session on charger " + chargerId;
-        session.unplug();
-        return "Charger " + chargerId + " unplugged. Session is now " + session.getStatus();
+        // Treat unplug as session completion: end the session, publish receipt and
+        // remove it
+        session.end();
+        publishReceipt(session);
+        activeSessionsByCharger.remove(chargerId);
+        activeSessionsById.remove(session.getSessionId());
+        addMessage("Charger " + chargerId + " unplugged and session completed: " + session.getSessionId());
+        return "Charger " + chargerId + " unplugged. Session stopped: " + session.getSessionId();
     }
 
     // Pause / resume

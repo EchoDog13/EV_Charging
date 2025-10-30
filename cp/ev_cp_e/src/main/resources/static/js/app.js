@@ -1,9 +1,11 @@
 const q = (s) => document.querySelector(s);
+
 // Use same origin for central calls when possible
 const CENTRAL_BASE =
   typeof window !== "undefined" && window.location && window.location.origin
     ? window.location.origin
     : "http://localhost:9900";
+
 // Diagnostic startup log
 console.log(
   "CP app starting. CENTRAL_BASE=",
@@ -11,8 +13,6 @@ console.log(
   "location=",
   window.location.href
 );
-
-// getCentralBase removed; use CENTRAL_BASE (page origin) by default
 
 // Surface global JS errors into the messages panel to aid debugging
 window.addEventListener("error", (ev) => {
@@ -32,9 +32,12 @@ window.addEventListener("unhandledrejection", (ev) => {
     console.error("Failed to append rejection", e);
   }
 });
+
 const cpUid = () => q("#cpUid").value.trim();
 let simInterval = null;
 let msgInterval = null;
+let statePollTimer = null;
+let statePollRunning = false;
 const maxMessages = 50;
 let lastStateSeen = null;
 
@@ -44,23 +47,63 @@ async function load() {
     const j = await r.json();
     q("#output").textContent = JSON.stringify(j, null, 2);
     updateStatusBadge(j.state);
+    // Ensure the background state poller is running after an explicit load
+    startStatePolling();
   } catch (e) {
     q("#output").textContent = "Error loading: " + e.message;
   }
+}
+
+function stopStatePolling() {
+  if (statePollTimer) {
+    clearTimeout(statePollTimer);
+    statePollTimer = null;
+  }
+  statePollRunning = false;
+}
+
+function startStatePolling() {
+  if (statePollRunning) return;
+  statePollRunning = true;
+
+  // Recursive timeout so we can vary the interval depending on state
+  (async function schedule() {
+    if (!statePollRunning) return;
+    try {
+      const r = await fetch(`/cp/${encodeURIComponent(cpUid())}/state`);
+      if (r.ok) {
+        const j = await r.json();
+        // Update output and badge only if there's a change or if supplying
+        const currentState = j.state || "";
+        q("#output").textContent = JSON.stringify(j, null, 2);
+        updateStatusBadge(currentState);
+        lastStateSeen = currentState || lastStateSeen;
+
+        // while supplying, poll more aggressively
+        const delay =
+          currentState && currentState.toLowerCase() === "supplying"
+            ? 1000
+            : 5000;
+        statePollTimer = setTimeout(schedule, delay);
+        return;
+      }
+    } catch (e) {
+      // ignore transient errors but keep polling at a slow rate
+    }
+    // fallback delay on error
+    statePollTimer = setTimeout(schedule, 5000);
+  })();
 }
 
 function updateStatusBadge(state) {
   const el = q("#statusBadge");
   if (!el) return;
   const s = (state || "unknown").toLowerCase();
-  // Normalize spaces and special names
   let cls = s.replace(/\s+/g, "_");
   el.className = "status " + cls;
-  // If the state object contains more details (when load() added them),
-  // display an informative label for supplying
+
   try {
     if (s === "supplying") {
-      // attempt to fetch more details from the last loaded output
       const out = q("#output").textContent;
       if (out && out !== "—") {
         const j = JSON.parse(out);
@@ -71,12 +114,12 @@ function updateStatusBadge(state) {
         const cost =
           j.cost_eur !== undefined ? "€" + Number(j.cost_eur).toFixed(2) : "";
         const driver = j.driverId ? "Driver: " + j.driverId : "";
-        el.textContent = `Supplying — ${energy} ${cost} ${driver}`;
+        el.textContent = `Supplying — ${energy} ${cost} ${driver}`.trim();
         return;
       }
     }
   } catch (e) {
-    // fallback to simple label
+    // ignore
   }
   el.textContent = state ? state : "—";
 }
@@ -89,24 +132,19 @@ function appendMessage(text) {
   el.className = "message";
   el.textContent = new Date().toLocaleTimeString() + " — " + text;
   container.prepend(el);
-  // Trim messages
   while (container.children.length > maxMessages)
     container.removeChild(container.lastChild);
 }
 
 async function pollMessages() {
-  // First try a messages endpoint; fall back to polling state if missing
   try {
     const r = await fetch(`/api/cp/${encodeURIComponent(cpUid())}/messages`);
     if (r.status === 200) {
       const arr = await r.json();
       if (Array.isArray(arr)) {
-        // Render snapshot: replace current contents with the server-provided
-        // messages to avoid duplicates across polls.
         const container = q("#messages");
         if (!container) return;
         container.textContent = "";
-        // Server returns newest-first; render in that order so latest appears on top
         arr.forEach((m) => {
           const text = typeof m === "string" ? m : JSON.stringify(m);
           const el = document.createElement("div");
@@ -114,10 +152,10 @@ async function pollMessages() {
           el.textContent = new Date().toLocaleTimeString() + " — " + text;
           container.appendChild(el);
         });
-        // Trim to maxMessages if server returned more
         while (container.children.length > maxMessages)
           container.removeChild(container.lastChild);
-        // Also refresh the CP state so the status badge stays up-to-date
+
+        // Refresh state badge
         try {
           const rs = await fetch(`/cp/${encodeURIComponent(cpUid())}/state`);
           if (rs.ok) {
@@ -125,17 +163,13 @@ async function pollMessages() {
             updateStatusBadge(js.state);
             lastStateSeen = js.state || lastStateSeen;
           }
-        } catch (e) {
-          // ignore state refresh errors
-        }
+        } catch (e) {}
         return;
       }
     }
-  } catch (e) {
-    // ignore and try fallback
-  }
+  } catch (e) {}
 
-  // Fallback: poll state and show a short note when state changes
+  // Fallback: poll state and show change
   try {
     const r2 = await fetch(`/cp/${encodeURIComponent(cpUid())}/state`);
     if (r2.ok) {
@@ -147,41 +181,22 @@ async function pollMessages() {
         updateStatusBadge(newState);
       }
     }
-  } catch (e) {
-    // noop
-  }
+  } catch (e) {}
 }
 
 async function startSession() {
-  // create a manual charge request for this CP via central/authorize-like endpoint
-  const driver = q("#driverId") ? q("#driverId").value.trim() : "10";
-  const res = await fetch(
-    `/cp/${cpUid()}/charge-requests?driverId=${encodeURIComponent(driver)}`,
-    {
-      method: "POST",
-    }
-  );
-  const data = await res.json().catch(() => ({}));
-  q("#output").textContent =
-    "Session started:\n" + JSON.stringify(data, null, 2);
-}
-
-async function stopSession() {
   const driver = q("#driverId") ? q("#driverId").value.trim() : "10";
   const btn = q("#btnRequestCharge");
   if (btn) btn.disabled = true;
   try {
-    // create a manual charge request for this CP via central/authorize-like endpoint
     const res = await fetch(
       `/cp/${cpUid()}/charge-requests?driverId=${encodeURIComponent(driver)}`,
-      {
-        method: "POST",
-      }
+      { method: "POST" }
     );
-    const text = await res.text();
-    q("#output").textContent = "Charge request response:\n" + text;
-    appendMessage("OUT CP->central request: " + text);
-    // refresh state and messages to reflect any immediate changes
+    const data = await res.json().catch(() => ({}));
+    q("#output").textContent =
+      "Session started:\n" + JSON.stringify(data, null, 2);
+    appendMessage("Charge request sent");
     await load();
     await pollMessages();
   } catch (e) {
@@ -190,15 +205,10 @@ async function stopSession() {
   } finally {
     if (btn) btn.disabled = false;
   }
-  await fetch(`/cp/${cpUid()}/telemetry?kWh=${energy}&power=${power}`, {
-    method: "POST",
-  });
-  q("#output").textContent = "Telemetry sent.";
 }
 
 async function togglePlug() {
   try {
-    // Read current state
     const r = await fetch(`/cp/${cpUid()}/state`);
     if (!r.ok) {
       appendMessage("Failed to read state");
@@ -207,17 +217,18 @@ async function togglePlug() {
     const j = await r.json();
     const current = j.state || "";
     if (current === "supplying") {
-      // currently plugged/supplying -> unplug
       const ru = await fetch(`/cp/${cpUid()}/unplug`, { method: "POST" });
       const txt = await ru.text();
       appendMessage("Action: unplug -> " + txt);
+      // Unplug now ends the session: stop state polling so UI doesn't keep showing supplying
+      stopStatePolling();
     } else {
-      // PAUSED or any other non-supplying state -> attempt to plug (resume/start)
       const rp = await fetch(`/cp/${cpUid()}/plug`, { method: "POST" });
       const txt = await rp.text();
       appendMessage("Action: plug -> " + txt);
+      // After plugging, ensure polling resumes so the UI picks up supplying state
+      startStatePolling();
     }
-    // refresh state and messages immediately
     await load();
     await pollMessages();
   } catch (e) {
@@ -239,68 +250,106 @@ function stopSim() {
   }
 }
 
+// === STOP CHARGING BUTTON HANDLER (FIXED) ===
+function attachStopHandler() {
+  const btn = q("#btnStopCharge");
+  if (!btn) {
+    console.warn("Stop button #btnStopCharge not found in DOM");
+    return;
+  }
+  if (btn.__stopBound) return;
+  btn.__stopBound = true;
+
+  btn.addEventListener("click", async () => {
+    const driver = q("#driverId")?.value.trim() || "";
+    const uid = cpUid();
+    appendMessage(
+      `Stop charging requested for CP ${uid} (driver: ${driver || "none"})`
+    );
+
+    btn.disabled = true;
+    try {
+      // Send stop command to Central
+      const url = `${CENTRAL_BASE}/central/cps/${encodeURIComponent(uid)}/stop`;
+      const payload = { type: "stopCharging", chargerId: uid };
+      if (driver) payload.driverId = driver;
+
+      const res = await fetch(url, {
+        method: "POST",
+        mode: "cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const text = await res.text().catch(() => "");
+      const statusMsg = res.ok ? "OK" : "Failed";
+      appendMessage(`Stop command sent -> ${res.status} ${statusMsg}`);
+      q("#output").textContent = `Stop response: ${res.status} ${
+        text || statusMsg
+      }`;
+
+      // Refresh UI
+      await load();
+      await pollMessages();
+
+      // Optional: fallback to local /stop if Central fails
+      if (!res.ok) {
+        appendMessage("Central stop failed, trying local /stop");
+        try {
+          const localRes = await fetch(`/cp/${uid}/stop`, { method: "POST" });
+          appendMessage(`Local stop: ${localRes.status}`);
+        } catch (e) {
+          appendMessage("Local stop also failed: " + e.message);
+        }
+      }
+    } catch (e) {
+      appendMessage("Stop failed: " + e.message);
+      q("#output").textContent = "Stop failed: " + e.message;
+      console.error("Stop error:", e);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+// === BUTTON EVENT BINDINGS ===
 q("#btnLoad").onclick = () => {
   lastStateSeen = null;
   const c = q("#messages");
   if (c) c.textContent = "No messages yet.";
   load();
 };
+
 q("#btnClear").onclick = () => {
   lastStateSeen = null;
   const c = q("#messages");
   if (c) c.textContent = "No messages yet.";
 };
-// Attach request charge button
-if (q("#btnRequestCharge")) q("#btnRequestCharge").onclick = startSession;
 
-// Stop charging button (publish stopCharging to central)
-function attachStopHandler() {
-  const btn = q("#btnStopCharge");
-  if (!btn) return;
-  if (btn.__stopBound) return;
-  btn.__stopBound = true;
-  btn.addEventListener("click", async () => {
-    const driver = q("#driverId") ? q("#driverId").value.trim() : "";
-    const uid = cpUid();
-    appendMessage(`DEBUG: Stop button clicked for ${uid} (driver=${driver})`);
-    // Quick ping to central test endpoint for visibility
-    try {
-      const pingUrl = `${CENTRAL_BASE}/central/test`;
-      appendMessage("DEBUG: Pinging central -> " + pingUrl);
-      console.log("Pinging central at", pingUrl);
-      const ping = await fetch(pingUrl, { method: "GET", mode: "cors" });
-      appendMessage("Ping status: " + ping.status);
-    } catch (e) {
-      appendMessage("Ping failed: " + e.message);
-    }
-
-    const payload = { type: "stopCharging", chargerId: uid };
-    if (driver) payload.driverId = driver;
-    try {
-      const url = `${CENTRAL_BASE}/central/cps/${encodeURIComponent(uid)}/stop${
-        driver ? `?driverId=${encodeURIComponent(driver)}` : ""
-      }`;
-      console.log("Sending stop to central:", url, "payload:", payload);
-      appendMessage("DEBUG: Sending stop POST -> " + url);
-      const res = await fetch(url, { method: "POST", mode: "cors" });
-      const text = await res.text().catch(() => "");
-      appendMessage("Stop command sent -> " + (text || res.status));
-      q("#output").textContent =
-        "Stop command sent. Response: " + (text || res.status);
-    } catch (e) {
-      appendMessage("Failed to send stop command: " + e.message);
-      q("#output").textContent = "Stop failed: " + e.message;
-      console.error("Stop POST error:", e);
-    }
-  });
+if (q("#btnRequestCharge")) {
+  q("#btnRequestCharge").onclick = startSession;
 }
 
+// Attach stop handler when DOM is ready
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", attachStopHandler);
 } else {
   attachStopHandler();
 }
+
+// Initial load
 load();
 
-// Start polling messages every 2s
-if (!msgInterval) msgInterval = setInterval(pollMessages, 2000);
+// Start polling every 2 seconds
+if (!msgInterval) {
+  msgInterval = setInterval(pollMessages, 2000);
+}
+
+// === TELEMETRY SIMULATION (unchanged) ===
+function sendTelemetry() {
+  const energy = (Math.random() * 50).toFixed(3);
+  const power = (Math.random() * 22).toFixed(1);
+  fetch(`/cp/${cpUid()}/telemetry?kWh=${energy}&power=${power}`, {
+    method: "POST",
+  }).catch((e) => console.error("Telemetry failed:", e));
+}
