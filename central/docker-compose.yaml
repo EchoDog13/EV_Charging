@@ -12,9 +12,7 @@ services:
     environment:
       # Connect to local Kafka on your Mac
       KAFKA_BOOTSTRAP_SERVERS: 192.168.100.10:9092
-    networks:
-      alicante:
-        ipv4_address: 192.168.100.100
+
 
   # --------------------------------------------------------------------
   # Database & Admin Tool
@@ -38,9 +36,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-    networks:
-      alicante:
-        ipv4_address: 192.168.100.101  # Static IP for the database - same as central
+ 
 
   phpmyadmin:
     image: phpmyadmin:latest
