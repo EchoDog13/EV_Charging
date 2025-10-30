@@ -310,6 +310,36 @@ async function togglePlug() {
   }
 }
 
+// Explicit plug / unplug actions (separate buttons)
+async function plug() {
+  try {
+    const rp = await fetch(`${CP_BASE}/cp/${cpUid()}/plug`, { method: "POST" });
+    const txt = await rp.text();
+    appendMessage("Action: plug -> " + txt);
+    startStatePolling();
+    await load();
+    await pollMessages();
+  } catch (e) {
+    appendMessage("plug error: " + e.message);
+  }
+}
+
+async function unplug() {
+  try {
+    const ru = await fetch(`${CP_BASE}/cp/${cpUid()}/unplug`, {
+      method: "POST",
+    });
+    const txt = await ru.text();
+    appendMessage("Action: unplug -> " + txt);
+    // Unplug ends the session, stop polling to avoid stale supplying UI
+    stopStatePolling();
+    await load();
+    await pollMessages();
+  } catch (e) {
+    appendMessage("unplug error: " + e.message);
+  }
+}
+
 function simulate() {
   if (simInterval) return;
   q("#output").textContent = "Simulation running...";
@@ -343,6 +373,9 @@ q("#btnClear").onclick = () => {
 if (q("#btnRequestCharge")) {
   q("#btnRequestCharge").onclick = startSession;
 }
+// wire the new plug/unplug buttons
+if (q("#btnPlug")) q("#btnPlug").onclick = plug;
+if (q("#btnUnplug")) q("#btnUnplug").onclick = unplug;
 
 // Attach stop handler when DOM is ready
 if (document.readyState === "loading") {

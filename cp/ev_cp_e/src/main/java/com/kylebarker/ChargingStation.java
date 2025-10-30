@@ -186,8 +186,17 @@ public class ChargingStation {
     // Plug in / unplug
     public String plugIn(String chargerId) {
         ChargingSession session = activeSessionsByCharger.get(chargerId);
-        if (session == null)
-            return "No session on charger " + chargerId;
+        if (session == null) {
+            // No existing session: create a new session for this plug action so the
+            // user can plug in and start charging immediately. Use an unknown
+            // driver id when not supplied by the central/driver.
+            ChargingSession newSession = new ChargingSession(chargerId, "unknown");
+            activeSessionsByCharger.put(chargerId, newSession);
+            activeSessionsById.put(newSession.getSessionId(), newSession);
+            newSession.plugIn();
+            addMessage("Created and started new session on plug: " + newSession.getSessionId());
+            return "Created and plugged new session: " + newSession.getSessionId();
+        }
         session.plugIn();
         return "Charger " + chargerId + " plugged in. Session is now " + session.getStatus();
     }
@@ -197,7 +206,7 @@ public class ChargingStation {
         if (session == null)
             return "No session on charger " + chargerId;
         // Treat unplug as session completion: end the session, publish receipt and
-        // remove it
+        // remove it so a subsequent plug creates a fresh new session.
         session.end();
         publishReceipt(session);
         activeSessionsByCharger.remove(chargerId);
