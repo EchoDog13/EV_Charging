@@ -55,6 +55,8 @@ for i in $(seq 1 $NUM_CHARGERS); do
     export CENTRAL_IP=$CENTRAL_IP
     export CENTRAL_PORT=$CENTRAL_PORT
     export KAFKA_BROKER=$KAFKA_BROKER
+    export MONITOR_HOST=$MONITOR_HOST
+    export ENGINE_HOST=$ENGINE_HOST
 
     # Start containers with docker-compose
     docker-compose -p "$PROJECT_NAME" up -d --build --force-recreate
