@@ -59,7 +59,7 @@ for i in $(seq 1 $NUM_CHARGERS); do
     export ENGINE_HOST=$ENGINE_HOST
 
     # Start containers with docker-compose
-    docker-compose -p "$PROJECT_NAME" up -d --build --force-recreate
+    docker compose -p "$PROJECT_NAME" up -d --build --force-recreate
 
     if [ $? -eq 0 ]; then
         echo "Charger instance $i started successfully."
