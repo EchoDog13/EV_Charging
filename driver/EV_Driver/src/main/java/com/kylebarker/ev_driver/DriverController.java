@@ -31,7 +31,17 @@ public class DriverController {
     // POST /driver/charge-requests
     @PostMapping("/charge-requests")
     public ResponseEntity<ChargeRequestCreatedDto> create(@RequestBody CreateChargeRequestDto body) {
-        return ResponseEntity.ok(svc.createChargeRequest(body));
+        // create the charge request via service
+        ChargeRequestCreatedDto created = svc.createChargeRequest(body);
+
+        // build JSON payload expected by central system / Kafka consumer
+        String payload = String.format("{\"cpUid\":\"%d\",\"type\":\"startCharging\",\"driverId\":\"%d\"}",
+                body.getCpUid(), body.getDriverId());
+
+        // send to Kafka topic
+        kafkaProducerService.sendMessage("charge_requests", payload);
+
+        return ResponseEntity.ok(created);
     }
 
     // GET /driver/charge-requests/{requestId}
