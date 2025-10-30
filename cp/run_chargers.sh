@@ -16,7 +16,7 @@ if ! [[ "$NUM_CHARGERS" =~ ^[0-9]+$ ]] || [ "$NUM_CHARGERS" -le 0 ]; then
 fi
 
 # Base ports
-BASE_MONITOR_PORT=5050
+BASE_MONITOR_PORT=5900
 BASE_ENGINE_PORT=50000
 
 # Base charger ID
