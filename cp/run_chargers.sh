@@ -52,8 +52,8 @@ for i in $(seq 1 $NUM_CHARGERS); do
     export CENTRAL_PORT=$CENTRAL_PORT
     export KAFKA_BROKER=$KAFKA_BROKER
 
-    # Start containers with docker-compose
-    docker-compose -p "$PROJECT_NAME" up -d --build --force-recreate
+    # Start containers with docker compose (v2)
+    docker compose -p "$PROJECT_NAME" up -d --build --force-recreate
 
     if [ $? -eq 0 ]; then
         echo "Charger instance $i started successfully."
@@ -66,4 +66,4 @@ for i in $(seq 1 $NUM_CHARGERS); do
 done
 
 echo "All $NUM_CHARGERS charger instances have been launched."
-echo "Check with 'docker ps' or 'docker-compose -p cp1 ps', 'docker-compose -p cp2 ps', etc."
+echo "Check with 'docker ps' or 'docker compose -p cp1 ps', 'docker compose -p cp2 ps', etc."
