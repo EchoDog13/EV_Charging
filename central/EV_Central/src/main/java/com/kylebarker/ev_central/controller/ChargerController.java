@@ -217,4 +217,20 @@ public class ChargerController {
         messages.put(UUID.randomUUID().toString(), response);
         return "Stop command sent for charger " + chargerId;
     }
+
+    // Stop individual charging session (new: publishes 'chargerId' and optional
+    // driverId)
+    @PostMapping("/cps/{cpUid}/stop")
+    public ResponseEntity<String> stopChargingWithDriver(@PathVariable String cpUid,
+            @RequestParam(required = false) String driverId) {
+        JSONObject msg = new JSONObject();
+        msg.put("type", "stopCharging");
+        msg.put("chargerId", cpUid);
+        if (driverId != null && !driverId.isBlank()) {
+            msg.put("driverId", driverId);
+        }
+        kafkaSender.send("CP", msg.toString());
+        messages.put(UUID.randomUUID().toString(), msg);
+        return ResponseEntity.ok("Stop command sent for charger " + cpUid);
+    }
 }

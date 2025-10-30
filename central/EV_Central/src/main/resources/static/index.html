@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>EV Central Dashboard</title>
   <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    /* Ensure action buttons are visible and spaced */
+    #tbl td { vertical-align: middle; }
+    .stop-btn { padding: 6px 10px; background:#e04; color:#fff; border:none; border-radius:4px; cursor:pointer; }
+    .stop-btn:hover { background:#c03 }
+    .pill.SUPPLYING { background: #4caf50; color:#fff; padding:4px 8px; border-radius:12px }
+    .pill.STOPPED { background: #999; color:#fff; padding:4px 8px; border-radius:12px }
+  </style>
 </head>
 <body>
   <h1>EV Central Dashboard</h1>
@@ -15,7 +23,14 @@
   </div>
   <table id="tbl">
     <thead>
-      <tr><th>UID</th><th>Location</th><th>€ / kWh</th><th>State</th><th>Last seen</th></tr>
+      <tr>
+        <th>UID</th>
+        <th>Location</th>
+        <th>€ / kWh</th>
+        <th>State</th>
+        <th>Last seen</th>
+        <th>Actions</th>
+      </tr>
     </thead>
     <tbody></tbody>
   </table>

@@ -1,4 +1,10 @@
-const API_BASE = "http://192.168.100.100:9900";
+// Use the same origin that served the page by default so the dashboard works when
+// loaded from the central server. Fallback to the previous hard-coded host if
+// window.location is not available (rare in some embedding scenarios).
+const API_BASE =
+  typeof window !== "undefined" && window.location && window.location.origin
+    ? window.location.origin
+    : "http://192.168.100.100:9900";
 
 const tbody = document.querySelector("#tbl tbody");
 
@@ -49,6 +55,7 @@ function render(list) {
       <td>${(ch.pricePerKWh ?? 0).toFixed(2)}</td>
       <td class="state">${pill(ch.state)}</td>
       <td class="last">${fmt(ch.lastHealthCheck)}</td>
+      <td><button class="stop-btn" data-uid="${ch.uid}">Stop</button></td>
     </tr>`
     )
     .join("");
@@ -69,6 +76,37 @@ function render(list) {
         .querySelectorAll("tr")
         .forEach((r) => r.classList.remove("selected"));
       tr.classList.add("selected");
+    });
+  });
+
+  // wire stop button handlers
+  tbody.querySelectorAll("button.stop-btn").forEach((btn) => {
+    btn.addEventListener("click", async (ev) => {
+      ev.stopPropagation(); // prevent row click selection
+      const uid = btn.getAttribute("data-uid");
+      const driverId = prompt("Driver ID (optional):");
+      try {
+        const params = driverId
+          ? `?driverId=${encodeURIComponent(driverId)}`
+          : "";
+        const res = await fetch(
+          `${API_BASE}/central/cps/${uid}/stop${params}`,
+          {
+            method: "POST",
+          }
+        );
+        if (!res.ok) throw new Error(`Stop failed: ${res.status}`);
+        alert(`Stop command sent for charger ${uid}`);
+        // optimistic UI: mark state as STOPPED
+        const row = document.querySelector(`tr[data-uid='${uid}']`);
+        if (row) {
+          const stateCell = row.querySelector(".state");
+          if (stateCell) stateCell.innerHTML = pill("STOPPED");
+        }
+      } catch (e) {
+        console.error(e);
+        alert("Failed to send stop command");
+      }
     });
   });
 }

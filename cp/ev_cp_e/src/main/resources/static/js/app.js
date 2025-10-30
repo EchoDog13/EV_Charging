@@ -1,4 +1,37 @@
 const q = (s) => document.querySelector(s);
+// Use same origin for central calls when possible
+const CENTRAL_BASE =
+  typeof window !== "undefined" && window.location && window.location.origin
+    ? window.location.origin
+    : "http://localhost:9900";
+// Diagnostic startup log
+console.log(
+  "CP app starting. CENTRAL_BASE=",
+  CENTRAL_BASE,
+  "location=",
+  window.location.href
+);
+
+// getCentralBase removed; use CENTRAL_BASE (page origin) by default
+
+// Surface global JS errors into the messages panel to aid debugging
+window.addEventListener("error", (ev) => {
+  try {
+    appendMessage(`JS error: ${ev.message} at ${ev.filename}:${ev.lineno}`);
+  } catch (e) {
+    console.error("Failed to append JS error", e);
+  }
+});
+window.addEventListener("unhandledrejection", (ev) => {
+  try {
+    appendMessage(
+      "Unhandled rejection: " +
+        (ev.reason && ev.reason.message ? ev.reason.message : String(ev.reason))
+    );
+  } catch (e) {
+    console.error("Failed to append rejection", e);
+  }
+});
 const cpUid = () => q("#cpUid").value.trim();
 let simInterval = null;
 let msgInterval = null;
@@ -219,6 +252,54 @@ q("#btnClear").onclick = () => {
 };
 // Attach request charge button
 if (q("#btnRequestCharge")) q("#btnRequestCharge").onclick = startSession;
+
+// Stop charging button (publish stopCharging to central)
+function attachStopHandler() {
+  const btn = q("#btnStopCharge");
+  if (!btn) return;
+  if (btn.__stopBound) return;
+  btn.__stopBound = true;
+  btn.addEventListener("click", async () => {
+    const driver = q("#driverId") ? q("#driverId").value.trim() : "";
+    const uid = cpUid();
+    appendMessage(`DEBUG: Stop button clicked for ${uid} (driver=${driver})`);
+    // Quick ping to central test endpoint for visibility
+    try {
+      const pingUrl = `${CENTRAL_BASE}/central/test`;
+      appendMessage("DEBUG: Pinging central -> " + pingUrl);
+      console.log("Pinging central at", pingUrl);
+      const ping = await fetch(pingUrl, { method: "GET", mode: "cors" });
+      appendMessage("Ping status: " + ping.status);
+    } catch (e) {
+      appendMessage("Ping failed: " + e.message);
+    }
+
+    const payload = { type: "stopCharging", chargerId: uid };
+    if (driver) payload.driverId = driver;
+    try {
+      const url = `${CENTRAL_BASE}/central/cps/${encodeURIComponent(uid)}/stop${
+        driver ? `?driverId=${encodeURIComponent(driver)}` : ""
+      }`;
+      console.log("Sending stop to central:", url, "payload:", payload);
+      appendMessage("DEBUG: Sending stop POST -> " + url);
+      const res = await fetch(url, { method: "POST", mode: "cors" });
+      const text = await res.text().catch(() => "");
+      appendMessage("Stop command sent -> " + (text || res.status));
+      q("#output").textContent =
+        "Stop command sent. Response: " + (text || res.status);
+    } catch (e) {
+      appendMessage("Failed to send stop command: " + e.message);
+      q("#output").textContent = "Stop failed: " + e.message;
+      console.error("Stop POST error:", e);
+    }
+  });
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", attachStopHandler);
+} else {
+  attachStopHandler();
+}
 load();
 
 // Start polling messages every 2s
