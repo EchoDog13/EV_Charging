@@ -2,9 +2,7 @@ services:
   kafka:
     image: apache/kafka:latest
     container_name: kafka
-    networks:
-      alicante:
-        ipv4_address: 192.168.100.10  # Static IP for Kafka
+    network_mode: "host"
     ports:
       - "9092:9092"
     environment:
@@ -24,9 +22,6 @@ services:
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
-    networks:
-      alicante:
-        ipv4_address: 192.168.100.20  # Static IP for Kafka UI
     ports:
       - "8080:8080"
     environment:
@@ -35,7 +30,3 @@ services:
       - KAFKA_CLUSTERS_0_ZOOKEEPER=  # Empty for KRaft mode
     depends_on:
       - kafka
-
-networks:
-  alicante:
-    external: true  # Use the external network we created

@@ -54,16 +54,6 @@ services:
     depends_on:
       ev_db:
         condition: service_healthy
-    networks:
-      alicante:
-        ipv4_address: 192.168.100.102  # Static IP for phpMyAdmin - same as central
-
-# --------------------------------------------------------------------
-# Networks and Volumes
-# --------------------------------------------------------------------
-networks:
-  alicante:
-    external: true # So this can connect to other Docker Compose projects (like Driver, CP, etc.)
 
 volumes:
   ev_db_data:
