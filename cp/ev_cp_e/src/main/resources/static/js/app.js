@@ -356,6 +356,42 @@ function stopSim() {
 
 // Stop button removed from UI; related control actions are now handled via central or plug/unplug flows.
 
+// Ensure attachStopHandler exists (was previously removed) so other code can safely call it.
+function attachStopHandler() {
+  // make idempotent
+  if (attachStopHandler._attached) return;
+  attachStopHandler._attached = true;
+
+  // Wire optional stop button if present in templates
+  try {
+    const btn = q("#btnStop");
+    if (btn) {
+      btn.addEventListener("click", () => {
+        // stop simulation and polling
+        stopSim();
+        stopStatePolling();
+        if (msgInterval) {
+          clearInterval(msgInterval);
+          msgInterval = null;
+        }
+        appendMessage("Stopped by user");
+      });
+    }
+
+    // Ensure background timers are cleaned up on page unload
+    window.addEventListener("beforeunload", () => {
+      stopSim();
+      stopStatePolling();
+      if (msgInterval) {
+        clearInterval(msgInterval);
+        msgInterval = null;
+      }
+    });
+  } catch (e) {
+    // noop - defensive in case DOM isn't available
+  }
+}
+
 // === BUTTON EVENT BINDINGS ===
 q("#btnLoad").onclick = () => {
   lastStateSeen = null;
