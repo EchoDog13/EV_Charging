@@ -23,9 +23,12 @@ BASE_ENGINE_PORT=50000
 BASE_CHARGER_ID=1000
 
 # Network-wide variables (adjust to your environment)
-CENTRAL_IP="192.168.100.100"
+CENTRAL_IP="100.83.66.30"
 CENTRAL_PORT=5500
-KAFKA_BROKER="192.168.100.10:9092"
+KAFKA_BROKER="100.83.66.30:9092"
+
+MONITOR_HOST="100.123.78.116"
+ENGINE_HOST="100.123.78.116"
 
 echo "Starting $NUM_CHARGERS charger instances..."
 
@@ -36,6 +39,7 @@ for i in $(seq 1 $NUM_CHARGERS); do
     CURRENT_CHARGER_ID=$((BASE_CHARGER_ID + i - 1))
     CHARGER_APP_NAME="$CURRENT_CHARGER_ID"
     PROJECT_NAME="${i}"
+
 
     echo "--- Setting up Charger instance $i (Project: $PROJECT_NAME) ---"
     echo "  CHARGER_ID: $CURRENT_CHARGER_ID"
