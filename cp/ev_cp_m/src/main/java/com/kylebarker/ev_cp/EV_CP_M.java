@@ -28,7 +28,7 @@ public class EV_CP_M implements Runnable {
 
     // @Option(names = { "-ep", "--engine-port" }, description = "Port of the
     // engine")
-    Integer enginePort = Integer.parseInt(System.getenv().getOrDefault("ENGINE_PORT", "5050"));
+    Integer enginePort = Integer.parseInt(System.getenv().getOrDefault("ENGINE_PORT", "5051"));
 
     // @Option(names = { "-ei", "--engine-ip" }, description = "Engine IP or
     // hostname")
@@ -56,6 +56,14 @@ public class EV_CP_M implements Runnable {
 
     private volatile String state = "DISCONNECTED";
     private volatile boolean running = true;
+    private volatile long lastEngineHealth = 0L;
+    // timeout in ms after which a missing engine healthcheck marks the CP
+    // disconnected
+    private final long engineHealthTimeoutMs = Long
+            .parseLong(System.getenv().getOrDefault("ENGINE_HEALTH_TIMEOUT_MS", "5000"));
+    // whether we've seen at least one engine connection/health (used to decide
+    // error marking)
+    private volatile boolean engineSeenConnected = false;
 
     private Thread healthCheckThread;
     private Thread centralReaderThread;
@@ -65,6 +73,9 @@ public class EV_CP_M implements Runnable {
     @Override
     public void run() {
         startEngineListener();
+
+        // monitor engine health/timeouts
+        startEngineHealthMonitor();
 
         if (registerFlag) {
             attemptRegistration();
@@ -259,12 +270,18 @@ public class EV_CP_M implements Runnable {
                     JsonNode json = mapper.readTree(line);
                     if (json.has("function") && "healthcheck".equals(json.get("function").asText())) {
                         int uid = json.has("uid") ? json.get("uid").asInt() : -1;
-                        String state = json.has("state") ? json.get("state").asText() : "UNKNOWN";
+                        String engineState = json.has("state") ? json.get("state").asText() : "UNKNOWN";
                         long timestamp = json.has("timestamp") ? json.get("timestamp").asLong()
                                 : System.currentTimeMillis();
 
-                        System.out.println("Health check received - UID: " + uid + ", State: " + state + ", Timestamp: "
-                                + timestamp);
+                        // Normalize and store the engine state
+                        String normalized = normalizeState(engineState);
+                        this.state = normalized;
+                        this.lastEngineHealth = System.currentTimeMillis();
+                        this.engineSeenConnected = true;
+
+                        System.out.println("Health check received - UID: " + uid + ", EngineState: " + engineState
+                                + ", NormalizedState: " + normalized + ", Timestamp: " + timestamp);
 
                         ObjectNode ack = mapper.createObjectNode();
                         ack.put("function", "ack");
@@ -291,6 +308,69 @@ public class EV_CP_M implements Runnable {
         }));
 
         client.run();
+    }
+
+    /**
+     * Map incoming engine state strings (case-insensitive) to the central enum
+     * names.
+     * If an unknown state is provided, default to DISCONNECTED.
+     */
+    private String normalizeState(String s) {
+        if (s == null)
+            return "DISCONNECTED";
+        String u = s.trim().toUpperCase();
+        switch (u) {
+            case "ACTIVATED":
+            case "START":
+                return "ACTIVATED";
+            case "SUPPLYING":
+            case "SUPPLY":
+            case "CHARGING":
+                return "SUPPLYING";
+            case "STOPPED":
+            case "STOP":
+                return "STOPPED";
+            case "OUT_OF_ORDER":
+            case "OUTOFORDER":
+            case "ERROR":
+            case "FAULT":
+                return "OUT_OF_ORDER";
+            case "DISCONNECTED":
+            case "OFFLINE":
+                return "DISCONNECTED";
+            default:
+                // If it's already one of the enum names, return it; otherwise DISCONNECTED
+                try {
+                    // verify by attempting to use valueOf on central enum via reflection-less check
+                    // just try known values
+                    if (u.equals("ACTIVATED") || u.equals("STOPPED") || u.equals("SUPPLYING")
+                            || u.equals("OUT_OF_ORDER") || u.equals("DISCONNECTED"))
+                        return u;
+                } catch (Exception ignored) {
+                }
+                return "DISCONNECTED";
+        }
+    }
+
+    private void startEngineHealthMonitor() {
+        Thread monitor = new Thread(() -> {
+            while (running) {
+                try {
+                    long last = lastEngineHealth;
+                    long now = System.currentTimeMillis();
+                    if (last > 0 && (now - last) > engineHealthTimeoutMs) {
+                        if (engineSeenConnected && !"DISCONNECTED".equals(state)) {
+                            state = "DISCONNECTED";
+                            System.out.println("Engine health timeout: marking CP state as DISCONNECTED");
+                        }
+                    }
+                    Thread.sleep(500);
+                } catch (InterruptedException ignored) {
+                }
+            }
+        }, "engine-health-monitor");
+        monitor.setDaemon(true);
+        monitor.start();
     }
 
 }

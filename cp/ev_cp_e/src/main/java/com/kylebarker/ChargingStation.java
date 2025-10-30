@@ -3,6 +3,7 @@ package com.kylebarker;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import com.kylebarker.repository.KafkaSender;
+import com.kylebarker.repository.EngineClient;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
@@ -24,6 +25,7 @@ public class ChargingStation {
 
     private final String chargerId;
     private final KafkaSender kafkaSender;
+    private final EngineClient engineClient;
 
     // Charger ID is now required to be supplied via configuration; no
     // auto-generation.
@@ -67,6 +69,18 @@ public class ChargingStation {
         }
         this.chargerId = configuredChargerId;
         this.kafkaSender = kafkaSender;
+
+        // Start the plain socket EngineClient (not managed by Spring)
+        EngineClient client = new EngineClient(this);
+        this.engineClient = client;
+
+        // ensure we shutdown the engine client on JVM exit
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                client.shutdown();
+            } catch (Exception ignored) {
+            }
+        }));
 
         System.out.println("Charging Station started with ID: " + chargerId + " (configured)");
 

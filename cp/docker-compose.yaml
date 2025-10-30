@@ -11,11 +11,11 @@ services:
     networks:
       - alicante
     ports:
-      - "${MONITOR_HOST_PORT}:5050" # <--- Changed here
+      - "${MONITOR_HOST_PORT}:5051" # monitor engine socket now maps to container port 5051
     command: "${MONITOR_COMMAND}"
     environment:
       - CHARGER_ID=${CHARGER_ID:-1000}
-      - ENGINE_PORT=5050 # This might need to change if engine communicates with monitor on a specific port. For internal docker network, it's usually service name:port
+      - ENGINE_PORT=5051 # engine will connect to monitor on port 5051
       - CENTRAL_IP=${CENTRAL_IP}
       - CENTRAL_PORT=${CENTRAL_PORT}
     deploy:
@@ -36,6 +36,8 @@ services:
       - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
       - EUREKA_INSTANCE_HOSTNAME=${CONTAINER_NAME}
       - EUREKA_INSTANCE_METADATA_CHARGER_ID=${CHARGER_ID:-1000}
+      - ENGINE_HOST=monitor
+      - ENGINE_PORT=5051
 
     command: >
       sh -c "
