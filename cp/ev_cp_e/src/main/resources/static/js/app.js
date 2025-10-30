@@ -1,5 +1,65 @@
 const q = (s) => document.querySelector(s);
 
+// Allow overriding CP API base (useful when running multiple charger instances)
+function cpBuildBase() {
+  try {
+    const stored = localStorage.getItem("cp_api_base");
+    if (stored) return stored;
+  } catch (e) {}
+  if (
+    typeof window !== "undefined" &&
+    window.location &&
+    window.location.origin
+  )
+    return window.location.origin;
+  return "http://localhost:9900";
+}
+let CP_BASE = cpBuildBase();
+function cpSetBase(v) {
+  CP_BASE = v;
+  try {
+    if (v == null) localStorage.removeItem("cp_api_base");
+    else localStorage.setItem("cp_api_base", v);
+  } catch (e) {}
+  // Accept raw port (e.g. "9901") or full URL (http://host:port) and normalize
+  function normalize(input) {
+    if (!input && input !== "") return input;
+    const s = String(input).trim();
+    if (!s) return null;
+    // port only
+    if (/^\d+$/.test(s)) {
+      try {
+        if (typeof window !== "undefined" && window.location) {
+          return `${window.location.protocol}//${window.location.hostname}:${s}`;
+        }
+      } catch (e) {}
+      return `http://localhost:${s}`;
+    }
+    // leading :9901 => use same host
+    if (/^:\d+$/.test(s)) {
+      const p = s.replace(/^:/, "");
+      try {
+        if (typeof window !== "undefined" && window.location) {
+          return `${window.location.protocol}//${window.location.hostname}:${p}`;
+        }
+      } catch (e) {}
+      return `http://localhost:${p}`;
+    }
+    // if it already looks like http(s) URL, keep
+    if (/^https?:\/\//i.test(s)) return s;
+    // otherwise assume host:port or hostname only
+    return s;
+  }
+
+  const normalized = normalize(v);
+  CP_BASE = normalized || cpBuildBase();
+  try {
+    if (!normalized) localStorage.removeItem("cp_api_base");
+    else localStorage.setItem("cp_api_base", normalized);
+  } catch (e) {}
+}
+window.cpConfig = { getBase: () => CP_BASE, setBase: cpSetBase };
+
 // Use same origin for central calls when possible
 const CENTRAL_BASE =
   typeof window !== "undefined" && window.location && window.location.origin
@@ -43,7 +103,7 @@ let lastStateSeen = null;
 
 async function load() {
   try {
-    const r = await fetch(`/cp/${cpUid()}/state`);
+    const r = await fetch(`${CP_BASE}/cp/${cpUid()}/state`);
     const j = await r.json();
     q("#output").textContent = JSON.stringify(j, null, 2);
     updateStatusBadge(j.state);
@@ -70,7 +130,9 @@ function startStatePolling() {
   (async function schedule() {
     if (!statePollRunning) return;
     try {
-      const r = await fetch(`/cp/${encodeURIComponent(cpUid())}/state`);
+      const r = await fetch(
+        `${CP_BASE}/cp/${encodeURIComponent(cpUid())}/state`
+      );
       if (r.ok) {
         const j = await r.json();
         // Update output and badge only if there's a change or if supplying
@@ -138,7 +200,9 @@ function appendMessage(text) {
 
 async function pollMessages() {
   try {
-    const r = await fetch(`/api/cp/${encodeURIComponent(cpUid())}/messages`);
+    const r = await fetch(
+      `${CP_BASE}/api/cp/${encodeURIComponent(cpUid())}/messages`
+    );
     if (r.status === 200) {
       const arr = await r.json();
       if (Array.isArray(arr)) {
@@ -157,7 +221,9 @@ async function pollMessages() {
 
         // Refresh state badge
         try {
-          const rs = await fetch(`/cp/${encodeURIComponent(cpUid())}/state`);
+          const rs = await fetch(
+            `${CP_BASE}/cp/${encodeURIComponent(cpUid())}/state`
+          );
           if (rs.ok) {
             const js = await rs.json();
             updateStatusBadge(js.state);
@@ -171,7 +237,9 @@ async function pollMessages() {
 
   // Fallback: poll state and show change
   try {
-    const r2 = await fetch(`/cp/${encodeURIComponent(cpUid())}/state`);
+    const r2 = await fetch(
+      `${CP_BASE}/cp/${encodeURIComponent(cpUid())}/state`
+    );
     if (r2.ok) {
       const j = await r2.json();
       const newState = j.state || JSON.stringify(j);
@@ -190,7 +258,9 @@ async function startSession() {
   if (btn) btn.disabled = true;
   try {
     const res = await fetch(
-      `/cp/${cpUid()}/charge-requests?driverId=${encodeURIComponent(driver)}`,
+      `${CP_BASE}/cp/${cpUid()}/charge-requests?driverId=${encodeURIComponent(
+        driver
+      )}`,
       { method: "POST" }
     );
     const data = await res.json().catch(() => ({}));
@@ -209,7 +279,7 @@ async function startSession() {
 
 async function togglePlug() {
   try {
-    const r = await fetch(`/cp/${cpUid()}/state`);
+    const r = await fetch(`${CP_BASE}/cp/${cpUid()}/state`);
     if (!r.ok) {
       appendMessage("Failed to read state");
       return;
@@ -217,13 +287,17 @@ async function togglePlug() {
     const j = await r.json();
     const current = j.state || "";
     if (current === "supplying") {
-      const ru = await fetch(`/cp/${cpUid()}/unplug`, { method: "POST" });
+      const ru = await fetch(`${CP_BASE}/cp/${cpUid()}/unplug`, {
+        method: "POST",
+      });
       const txt = await ru.text();
       appendMessage("Action: unplug -> " + txt);
       // Unplug now ends the session: stop state polling so UI doesn't keep showing supplying
       stopStatePolling();
     } else {
-      const rp = await fetch(`/cp/${cpUid()}/plug`, { method: "POST" });
+      const rp = await fetch(`${CP_BASE}/cp/${cpUid()}/plug`, {
+        method: "POST",
+      });
       const txt = await rp.text();
       appendMessage("Action: plug -> " + txt);
       // After plugging, ensure polling resumes so the UI picks up supplying state
@@ -289,7 +363,29 @@ if (!msgInterval) {
 function sendTelemetry() {
   const energy = (Math.random() * 50).toFixed(3);
   const power = (Math.random() * 22).toFixed(1);
-  fetch(`/cp/${cpUid()}/telemetry?kWh=${energy}&power=${power}`, {
+  fetch(`${CP_BASE}/cp/${cpUid()}/telemetry?kWh=${energy}&power=${power}`, {
     method: "POST",
   }).catch((e) => console.error("Telemetry failed:", e));
 }
+
+// Wire input controls for CP API base if present in template
+document.addEventListener("DOMContentLoaded", () => {
+  const inp = q("#cp-api-base");
+  const save = q("#cp-api-save");
+  const reset = q("#cp-api-reset");
+  if (inp) inp.value = CP_BASE;
+  save?.addEventListener("click", () => {
+    const v = inp.value?.trim();
+    if (!v) return alert("Enter valid base URL");
+    cpSetBase(v);
+    alert("CP API base saved: " + CP_BASE);
+  });
+  reset?.addEventListener("click", () => {
+    try {
+      localStorage.removeItem("cp_api_base");
+    } catch (e) {}
+    CP_BASE = cpBuildBase();
+    if (inp) inp.value = CP_BASE;
+    alert("CP API base reset to: " + CP_BASE);
+  });
+});

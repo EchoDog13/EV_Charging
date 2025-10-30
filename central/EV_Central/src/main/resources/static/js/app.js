@@ -55,7 +55,10 @@ function render(list) {
       <td>${(ch.pricePerKWh ?? 0).toFixed(2)}</td>
       <td class="state">${pill(ch.state)}</td>
       <td class="last">${fmt(ch.lastHealthCheck)}</td>
-      <td><button class="stop-btn" data-uid="${ch.uid}">Stop</button></td>
+      <td>
+        <button class="stop-btn" data-uid="${ch.uid}">Stop</button>
+        <button class="resume-btn" data-uid="${ch.uid}">Resume</button>
+      </td>
     </tr>`
     )
     .join("");
@@ -109,6 +112,29 @@ function render(list) {
       }
     });
   });
+
+  // wire resume button handlers
+  tbody.querySelectorAll("button.resume-btn").forEach((btn) => {
+    btn.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      const uid = btn.getAttribute("data-uid");
+      try {
+        const res = await fetch(`${API_BASE}/central/cps/${uid}/resume`, {
+          method: "POST",
+        });
+        if (!res.ok) throw new Error(`Resume failed: ${res.status}`);
+        alert(`Resume command sent for charger ${uid}`);
+        const row = document.querySelector(`tr[data-uid='${uid}']`);
+        if (row) {
+          const stateCell = row.querySelector(".state");
+          if (stateCell) stateCell.innerHTML = pill("ACTIVATED");
+        }
+      } catch (e) {
+        console.error(e);
+        alert("Failed to send resume command");
+      }
+    });
+  });
 }
 
 // Poll every 5 seconds
@@ -120,6 +146,29 @@ setInterval(() => load().catch(console.error), 10000);
 document.addEventListener("DOMContentLoaded", () => {
   const startBtn = document.getElementById("start-all");
   const stopBtn = document.getElementById("stop-all");
+
+  // Wire port/host input control if present on the page
+  const apiInput = document.getElementById("ev-api-base");
+  const apiSave = document.getElementById("ev-api-save");
+  const apiReset = document.getElementById("ev-api-reset");
+  if (apiInput) apiInput.value = API_BASE || "";
+  apiSave?.addEventListener("click", () => {
+    const v = apiInput.value?.trim();
+    if (!v)
+      return alert(
+        "Please enter a valid base URL (e.g. http://localhost:9901)"
+      );
+    setApiBase(v);
+    alert("API base saved: " + API_BASE);
+  });
+  apiReset?.addEventListener("click", () => {
+    try {
+      localStorage.removeItem("ev_api_base");
+    } catch (e) {}
+    API_BASE = buildApiBaseFromStored();
+    if (apiInput) apiInput.value = API_BASE;
+    alert("API base reset to: " + API_BASE);
+  });
 
   startBtn?.addEventListener("click", async () => {
     try {
@@ -234,8 +283,10 @@ function ensureSse(uid) {
           // state, treat telemetry as an indicator the CP is SUPPLYING (charging)
           let incomingState = null;
           if (data.state) incomingState = data.state;
-          else if (data.sessionId || data.energy_kWh || data.power_kW) incomingState = "SUPPLYING";
-          if (incomingState) stateCell.innerHTML = pill(String(incomingState).toUpperCase());
+          else if (data.sessionId || data.energy_kWh || data.power_kW)
+            incomingState = "SUPPLYING";
+          if (incomingState)
+            stateCell.innerHTML = pill(String(incomingState).toUpperCase());
           if (data.timestamp)
             lastCell.textContent = new Date(data.timestamp).toLocaleString();
         }

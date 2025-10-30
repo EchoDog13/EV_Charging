@@ -156,11 +156,32 @@ public class ChargerController {
     // Stop all charging points at once
     @PostMapping("/cps/commands/stop-all")
     public ResponseEntity<String> stopAllChargers() {
-        JSONObject msg = new JSONObject();
-        msg.put("type", "stopAll");
-        kafkaSender.send("CP", msg.toString());
-        messages.put(UUID.randomUUID().toString(), msg);
-        return ResponseEntity.ok("Stop all command sent");
+        // Persist OUT_OF_ORDER state for all chargers so the dashboard shows RED/Out of
+        // Service
+        List<Charger> all = repository.findAll();
+        for (Charger c : all) {
+            try {
+                // don't mark disconnected chargers as out-of-order
+                if (c.getState() == null || c.getState() == chargerState.DISCONNECTED)
+                    continue;
+                c.setState(chargerState.OUT_OF_ORDER);
+                repository.save(c);
+                JSONObject m = new JSONObject();
+                m.put("type", "state_change");
+                m.put("uid", c.getUid());
+                m.put("state", chargerState.OUT_OF_ORDER.name());
+                messages.put(UUID.randomUUID().toString(), m);
+                kafkaSender.send("CP", m.toString());
+            } catch (Exception ex) {
+                // ignore per-device failures
+            }
+        }
+        // also publish a generic stopAll command for CP fleet
+        JSONObject cmd = new JSONObject();
+        cmd.put("type", "stopAll");
+        kafkaSender.send("CP", cmd.toString());
+        messages.put(UUID.randomUUID().toString(), cmd);
+        return ResponseEntity.ok("Stop all command sent and persisted");
     }
 
     // Start all charging points at once (publishes a startAll message)
@@ -259,6 +280,21 @@ public class ChargerController {
         JSONObject response = new JSONObject();
         response.put("type", "stopCharging");
         response.put("uid", chargerId);
+
+        // Persist OUT_OF_ORDER only if the charger is present and not DISCONNECTED
+        repository.findById(chargerId).ifPresent(ch -> {
+            if (ch.getState() != null && ch.getState() != chargerState.DISCONNECTED) {
+                ch.setState(chargerState.OUT_OF_ORDER);
+                repository.save(ch);
+                JSONObject m = new JSONObject();
+                m.put("type", "state_change");
+                m.put("uid", ch.getUid());
+                m.put("state", chargerState.OUT_OF_ORDER.name());
+                messages.put(UUID.randomUUID().toString(), m);
+                kafkaSender.send("CP", m.toString());
+            }
+        });
+
         kafkaSender.send("CP", response.toString());
         messages.put(UUID.randomUUID().toString(), response);
         return "Stop command sent for charger " + chargerId;
@@ -269,14 +305,77 @@ public class ChargerController {
     @PostMapping("/cps/{cpUid}/stop")
     public ResponseEntity<String> stopChargingWithDriver(@PathVariable String cpUid,
             @RequestParam(required = false) String driverId) {
+        // Persist OUT_OF_ORDER for this charger and notify CP
         JSONObject msg = new JSONObject();
         msg.put("type", "stopCharging");
         msg.put("chargerId", cpUid);
         if (driverId != null && !driverId.isBlank()) {
             msg.put("driverId", driverId);
         }
+        try {
+            Long uid = Long.parseLong(cpUid);
+            repository.findById(uid).ifPresent(ch -> {
+                if (ch.getState() == null || ch.getState() == chargerState.DISCONNECTED)
+                    return;
+                ch.setState(chargerState.OUT_OF_ORDER);
+                repository.save(ch);
+                JSONObject m = new JSONObject();
+                m.put("type", "state_change");
+                m.put("uid", ch.getUid());
+                m.put("state", chargerState.OUT_OF_ORDER.name());
+                messages.put(UUID.randomUUID().toString(), m);
+                kafkaSender.send("CP", m.toString());
+            });
+        } catch (NumberFormatException ignore) {
+        }
+
         kafkaSender.send("CP", msg.toString());
         messages.put(UUID.randomUUID().toString(), msg);
-        return ResponseEntity.ok("Stop command sent for charger " + cpUid);
+        return ResponseEntity.ok("Stop command sent for charger " + cpUid + " and state persisted");
+    }
+
+    // Resume individual charging point (set to ACTIVATED)
+    @PostMapping("/cps/{cpUid}/resume")
+    public ResponseEntity<String> resumeCharging(@PathVariable String cpUid) {
+        try {
+            Long uid = Long.parseLong(cpUid);
+            repository.findById(uid).ifPresent(ch -> {
+                ch.setState(chargerState.ACTIVATED);
+                repository.save(ch);
+                JSONObject m = new JSONObject();
+                m.put("type", "state_change");
+                m.put("uid", ch.getUid());
+                m.put("state", chargerState.ACTIVATED.name());
+                messages.put(UUID.randomUUID().toString(), m);
+                kafkaSender.send("CP", m.toString());
+            });
+            return ResponseEntity.ok("Resume command sent for charger " + cpUid);
+        } catch (NumberFormatException ex) {
+            return ResponseEntity.badRequest().body("Invalid charger id");
+        }
+    }
+
+    // Resume all charging points (set all to ACTIVATED)
+    @PostMapping("/cps/commands/resume-all")
+    public ResponseEntity<String> resumeAllChargers() {
+        List<Charger> all = repository.findAll();
+        for (Charger c : all) {
+            try {
+                c.setState(chargerState.ACTIVATED);
+                repository.save(c);
+                JSONObject m = new JSONObject();
+                m.put("type", "state_change");
+                m.put("uid", c.getUid());
+                m.put("state", chargerState.ACTIVATED.name());
+                messages.put(UUID.randomUUID().toString(), m);
+                kafkaSender.send("CP", m.toString());
+            } catch (Exception ex) {
+            }
+        }
+        JSONObject cmd = new JSONObject();
+        cmd.put("type", "startAll");
+        kafkaSender.send("CP", cmd.toString());
+        messages.put(UUID.randomUUID().toString(), cmd);
+        return ResponseEntity.ok("Resume all command sent and persisted");
     }
 }
