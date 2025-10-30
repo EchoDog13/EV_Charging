@@ -187,18 +187,31 @@ public class ChargingStation {
     public String plugIn(String chargerId) {
         ChargingSession session = activeSessionsByCharger.get(chargerId);
         if (session == null) {
-            // No existing session: create a new session for this plug action so the
-            // user can plug in and start charging immediately. Use an unknown
-            // driver id when not supplied by the central/driver.
-            ChargingSession newSession = new ChargingSession(chargerId, "unknown");
-            activeSessionsByCharger.put(chargerId, newSession);
-            activeSessionsById.put(newSession.getSessionId(), newSession);
-            newSession.plugIn();
-            addMessage("Created and started new session on plug: " + newSession.getSessionId());
-            return "Created and plugged new session: " + newSession.getSessionId();
+            // Do not auto-create sessions on plug. The CP must have an approved
+            // session (created via startSession / charge request) before plugging
+            // the vehicle.
+            return "No approved session on charger " + chargerId
+                    + ". Request a charge (startSession) before plugging in.";
         }
-        session.plugIn();
-        return "Charger " + chargerId + " plugged in. Session is now " + session.getStatus();
+
+        String status = session.getStatus();
+        // Only allow plug if session is waiting (HOLD) or paused
+        if ("HOLD".equals(status) || "PAUSED".equals(status)) {
+            session.plugIn();
+            addMessage("Charger " + chargerId + " plugged in. Session: " + session.getSessionId());
+            return "Charger " + chargerId + " plugged in. Session is now " + session.getStatus();
+        }
+
+        if ("IN_PROGRESS".equals(status)) {
+            return "Charger " + chargerId + " is already supplying (session " + session.getSessionId() + ").";
+        }
+
+        if ("COMPLETED".equals(status)) {
+            return "Session " + session.getSessionId()
+                    + " is already completed. Request a new session before plugging.";
+        }
+
+        return "Cannot plug in: session is in state '" + status + "'.";
     }
 
     public String unplug(String chargerId) {
