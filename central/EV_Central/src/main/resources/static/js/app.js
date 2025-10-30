@@ -230,8 +230,12 @@ function ensureSse(uid) {
         if (row) {
           const stateCell = row.querySelector(".state");
           const lastCell = row.querySelector(".last");
-          // map incoming status/state keys if present
-          if (data.state) stateCell.innerHTML = pill(data.state);
+          // map incoming status/state keys if present; if telemetry has no explicit
+          // state, treat telemetry as an indicator the CP is SUPPLYING (charging)
+          let incomingState = null;
+          if (data.state) incomingState = data.state;
+          else if (data.sessionId || data.energy_kWh || data.power_kW) incomingState = "SUPPLYING";
+          if (incomingState) stateCell.innerHTML = pill(String(incomingState).toUpperCase());
           if (data.timestamp)
             lastCell.textContent = new Date(data.timestamp).toLocaleString();
         }

@@ -250,67 +250,7 @@ function stopSim() {
   }
 }
 
-// === STOP CHARGING BUTTON HANDLER (FIXED) ===
-function attachStopHandler() {
-  const btn = q("#btnStopCharge");
-  if (!btn) {
-    console.warn("Stop button #btnStopCharge not found in DOM");
-    return;
-  }
-  if (btn.__stopBound) return;
-  btn.__stopBound = true;
-
-  btn.addEventListener("click", async () => {
-    const driver = q("#driverId")?.value.trim() || "";
-    const uid = cpUid();
-    appendMessage(
-      `Stop charging requested for CP ${uid} (driver: ${driver || "none"})`
-    );
-
-    btn.disabled = true;
-    try {
-      // Send stop command to Central
-      const url = `${CENTRAL_BASE}/central/cps/${encodeURIComponent(uid)}/stop`;
-      const payload = { type: "stopCharging", chargerId: uid };
-      if (driver) payload.driverId = driver;
-
-      const res = await fetch(url, {
-        method: "POST",
-        mode: "cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const text = await res.text().catch(() => "");
-      const statusMsg = res.ok ? "OK" : "Failed";
-      appendMessage(`Stop command sent -> ${res.status} ${statusMsg}`);
-      q("#output").textContent = `Stop response: ${res.status} ${
-        text || statusMsg
-      }`;
-
-      // Refresh UI
-      await load();
-      await pollMessages();
-
-      // Optional: fallback to local /stop if Central fails
-      if (!res.ok) {
-        appendMessage("Central stop failed, trying local /stop");
-        try {
-          const localRes = await fetch(`/cp/${uid}/stop`, { method: "POST" });
-          appendMessage(`Local stop: ${localRes.status}`);
-        } catch (e) {
-          appendMessage("Local stop also failed: " + e.message);
-        }
-      }
-    } catch (e) {
-      appendMessage("Stop failed: " + e.message);
-      q("#output").textContent = "Stop failed: " + e.message;
-      console.error("Stop error:", e);
-    } finally {
-      btn.disabled = false;
-    }
-  });
-}
+// Stop button removed from UI; related control actions are now handled via central or plug/unplug flows.
 
 // === BUTTON EVENT BINDINGS ===
 q("#btnLoad").onclick = () => {
