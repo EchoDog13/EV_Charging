@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   # --------------------------------------------------------------------
   # Application Services
@@ -8,12 +10,11 @@ services:
     ports:
       - "8081:8080"
       - "5500:5500"
-      - "9900:9900" #web port
+      - "9900:9900"
     environment:
-      # Connect to local Kafka on your Mac
       KAFKA_BOOTSTRAP_SERVERS: 100.83.66.30:9092
     networks:
-      alicante
+      - alicante
 
   # --------------------------------------------------------------------
   # Database & Admin Tool
@@ -21,6 +22,7 @@ services:
   ev_db:
     image: mysql:8
     container_name: ev-db
+    hostname: ev-db
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
@@ -38,7 +40,7 @@ services:
       retries: 5
       start_period: 30s
     networks:
-      alicante # Static IP for the database - same as central
+      - alicante
 
   phpmyadmin:
     image: phpmyadmin:latest
@@ -54,14 +56,14 @@ services:
         condition: service_healthy
     networks:
       alicante:
-        ipv4_address: 192.168.100.102  # Static IP for phpMyAdmin - same as central
+        ipv4_address: 192.168.100.102
 
 # --------------------------------------------------------------------
 # Networks and Volumes
 # --------------------------------------------------------------------
 networks:
   alicante:
-    external: true # So this can connect to other Docker Compose projects (like Driver, CP, etc.)
+    external: true
 
 volumes:
   ev_db_data:
