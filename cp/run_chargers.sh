@@ -23,9 +23,9 @@ BASE_ENGINE_PORT=50000
 BASE_CHARGER_ID=1000
 
 # Network-wide variables (adjust to your environment)
-CENTRAL_IP="192.168.100.100"
+CENTRAL_IP="100.83.66.30"
 CENTRAL_PORT=5500
-KAFKA_BROKER="192.168.100.10:9092"
+KAFKA_BROKER="100.83.66.30:9092"
 
 echo "Starting $NUM_CHARGERS charger instances..."
 

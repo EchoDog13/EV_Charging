@@ -11,10 +11,9 @@ services:
       - "9900:9900" #web port
     environment:
       # Connect to local Kafka on your Mac
-      KAFKA_BOOTSTRAP_SERVERS: 192.168.100.10:9092
+      KAFKA_BOOTSTRAP_SERVERS: 100.83.66.30:9092
     networks:
-      alicante:
-        ipv4_address: 192.168.100.100
+      alicante
 
   # --------------------------------------------------------------------
   # Database & Admin Tool
@@ -39,8 +38,7 @@ services:
       retries: 5
       start_period: 30s
     networks:
-      alicante:
-        ipv4_address: 192.168.100.101  # Static IP for the database - same as central
+      alicante # Static IP for the database - same as central
 
   phpmyadmin:
     image: phpmyadmin:latest
