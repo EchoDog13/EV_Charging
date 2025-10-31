@@ -51,7 +51,8 @@ function cpSetBase(v) {
     return s;
   }
 
-  const normalized = normalize(v);
+  /"function"\s*:\s*healthcheck/i.test(s) ||
+    s.toLowerCase().includes("healthcheck");
   CP_BASE = normalized || cpBuildBase();
   try {
     if (!normalized) localStorage.removeItem("cp_api_base");
