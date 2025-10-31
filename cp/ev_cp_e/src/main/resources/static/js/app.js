@@ -208,18 +208,26 @@ function appendMessage(text) {
 // Helper to detect health-check / actuator messages
 function isHealthCheckMessage(text) {
   if (!text) return false;
-  const s = String(text);
-  // Common patterns: actuator health endpoints, lightweight health pings, or plain 'health' status
-  // Also detect JSON-ish payloads containing "function":"healthcheck" or "type":"health"
-  const jsonHealth =
-    /"function"\s*:\s*"?healthcheck"?|"type"\s*:\s*"?health"?/i;
-  return (
-    /\/actuator\/health\b|actuator\/health\b|health check\b|\bhealth\b/i.test(
-      s
-    ) ||
-    jsonHealth.test(s) ||
-    /"function"\s*:\s*healthcheck/i.test(s)
-  );
+
+  let s = String(text).trim();
+
+  // Try to parse as JSON
+  try {
+    const obj = JSON.parse(s);
+    if (obj.function && obj.function.toLowerCase() === "healthcheck") {
+      return true;
+    }
+    if (obj.type && obj.type.toLowerCase() === "health") {
+      return true;
+    }
+  } catch (e) {
+    // Not JSON, fallback to simple text match
+    if (/\/actuator\/health\b|actuator\/health\b|health check\b/i.test(s)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 async function pollMessages() {
