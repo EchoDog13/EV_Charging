@@ -26,6 +26,7 @@ services:
       - SPRING_APPLICATION_NAME=CHARGER-SERVICE-GROUP
       - ENGINE_HOST=100.123.78.116
       - ENGINE_PORT=5051
+      - MONITOR_HOST_PORT=${MONITOR_HOST_PORT}
 
     command: >
       sh -c "
