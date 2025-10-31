@@ -40,7 +40,7 @@ public class EngineClient {
         this.station = station;
         // resolve from environment if available
         String envHost = System.getenv("ENGINE_HOST");
-        String envPort = System.getenv("ENGINE_PORT");
+        String envPort = System.getenv("MONITOR_HOST_PORT");
         if (envHost != null && !envHost.isBlank())
             masterHost = envHost.trim();
         if (envPort != null && !envPort.isBlank()) {
