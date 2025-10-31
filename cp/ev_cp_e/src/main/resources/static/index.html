@@ -8,7 +8,7 @@
 </head>
 <body>
   <h1>Charging Point Engine</h1>
-  <div class="muted">Simulate charging process for a specific CP</div>
+  <div class="muted">Simulate charging process for a specific CP STATIC</div>
 
   <section class="card">
     <div class="row">
@@ -16,11 +16,6 @@
       <input id="cpUid" value="1000"/>
       <span id="statusBadge" class="status unknown">—</span>
       <button id="btnLoad">Load Session</button>
-      <!-- CP API base override: enter port (e.g. 9901) or full URL -->
-      <label style="margin-left:12px; font-size:90%">API base:</label>
-      <input id="cp-api-base" placeholder="9901 or http://localhost:9901" style="width:200px; margin-left:6px;" />
-      <button id="cp-api-save">Save</button>
-      <button id="cp-api-reset">Reset</button>
     </div>
     <pre id="output">—</pre>
   </section>
