@@ -8,7 +8,7 @@ services:
     command: "${MONITOR_COMMAND}"
     environment:
       - CHARGER_ID=${CHARGER_ID:-1000}
-      - ENGINE_PORT=5051 # engine will connect to monitor on port 5051
+      - ENGINE_PORT=${MONITOR_HOST_PORT} # engine will connect to monitor on port 5051
       - CENTRAL_IP=${CENTRAL_IP}
       - CENTRAL_PORT=${CENTRAL_PORT}
       - MONITOR_HOST=100.123.78.116
