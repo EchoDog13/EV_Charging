@@ -11,4 +11,4 @@ services:
     image: ev_driver:latest
     restart: unless-stopped
     environment:
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=192.168.100.10:9092
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=100.83.66.30:9092
