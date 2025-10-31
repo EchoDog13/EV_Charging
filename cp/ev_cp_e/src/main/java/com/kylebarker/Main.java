@@ -7,7 +7,6 @@ import org.springframework.kafka.annotation.EnableKafka;
 
 @SpringBootApplication(exclude = { org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration.class })
 @EnableKafka
-@EnableDiscoveryClient
 
 public class Main {
     public static void main(String[] args) {
