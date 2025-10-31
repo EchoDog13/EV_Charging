@@ -360,7 +360,7 @@ public class EV_CP_M implements Runnable {
                     long now = System.currentTimeMillis();
                     if (last > 0 && (now - last) > engineHealthTimeoutMs) {
                         if (engineSeenConnected && !"DISCONNECTED".equals(state)) {
-                            state = "DISCONNECTED";
+                            state = "OUT_OF_ORDER";
                             System.out.println("Engine health timeout: marking CP state as DISCONNECTED");
                         }
                     }
