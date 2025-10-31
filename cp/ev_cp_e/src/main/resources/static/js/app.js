@@ -187,6 +187,13 @@ function updateStatusBadge(state) {
 }
 
 function appendMessage(text) {
+  // Skip health-check messages that clutter the UI
+  try {
+    if (isHealthCheckMessage(text)) return;
+  } catch (e) {
+    // if detection fails, fall back to showing the message
+  }
+
   const container = q("#messages");
   if (!container) return;
   if (container.textContent === "No messages yet.") container.textContent = "";
@@ -196,6 +203,23 @@ function appendMessage(text) {
   container.prepend(el);
   while (container.children.length > maxMessages)
     container.removeChild(container.lastChild);
+}
+
+// Helper to detect health-check / actuator messages
+function isHealthCheckMessage(text) {
+  if (!text) return false;
+  const s = String(text);
+  // Common patterns: actuator health endpoints, lightweight health pings, or plain 'health' status
+  // Also detect JSON-ish payloads containing "function":"healthcheck" or "type":"health"
+  const jsonHealth =
+    /"function"\s*:\s*"?healthcheck"?|"type"\s*:\s*"?health"?/i;
+  return (
+    /\/actuator\/health\b|actuator\/health\b|health check\b|\bhealth\b/i.test(
+      s
+    ) ||
+    jsonHealth.test(s) ||
+    /"function"\s*:\s*healthcheck/i.test(s)
+  );
 }
 
 async function pollMessages() {
