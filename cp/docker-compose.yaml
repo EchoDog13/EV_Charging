@@ -19,7 +19,7 @@ services:
     build: ./ev_cp_e
     image: ev_engine:latest
     ports:
-      - "${ENGINE_HOST}:${ENGINE_HOST_PORT}:${ENGINE_HOST_PORT}"
+      - "${ENGINE_HOST}:${ENGINE_HOST_PORT}:8080" # engine REST API
     environment:
       - CHARGER_ID=${CHARGER_ID:-1000}
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=100.83.66.30:9092
