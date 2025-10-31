@@ -197,7 +197,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
-fetch("http://192.168.100.100:9900/central/cps")
+fetch("http://100.74.162.58:9900/central/cps")
   .then((r) => r.json())
   .then((list) => {
     const priority = {
@@ -271,30 +271,49 @@ function ensureSse(uid) {
   if (sseMap.has(uid)) return;
   try {
     const src = new EventSource(`${API_BASE}/central/telemetry/stream/${uid}`);
-    src.addEventListener("telemetry", (ev) => {
+    src.addEventListener("telemetry", async (ev) => {
       try {
         const data = JSON.parse(ev.data);
-        // Update row for this uid
+        // Always try to fetch authoritative state from the API for this uid.
+        // If the API call fails or doesn't include state, fall back to SSE payload.
+        let apiState = null;
+        let apiTimestamp = null;
+        try {
+          const res = await fetch(`${API_BASE}/central/cps/${uid}`);
+          if (res.ok) {
+            const js = await res.json();
+            apiState = js.state || null;
+            apiTimestamp = js.lastHealthCheck || js.timestamp || null;
+          }
+        } catch (e) {
+          // ignore API fetch errors and use SSE payload as fallback
+        }
+
+        // Update row for this uid using API state when available
         const row = document.querySelector(`tr[data-uid='${uid}']`);
         if (row) {
           const stateCell = row.querySelector(".state");
           const lastCell = row.querySelector(".last");
-          // map incoming status/state keys if present; if telemetry has no explicit
-          // state, treat telemetry as an indicator the CP is SUPPLYING (charging)
-          let incomingState = null;
-          if (data.state) incomingState = data.state;
-          else if (data.sessionId || data.energy_kWh || data.power_kW)
-            incomingState = "SUPPLYING";
-          if (incomingState)
+          let incomingState = apiState;
+          if (!incomingState) {
+            // fallback to SSE inference
+            if (data.state) incomingState = data.state;
+            else if (data.sessionId || data.energy_kWh || data.power_kW)
+              incomingState = "SUPPLYING";
+          }
+          if (incomingState && stateCell)
             stateCell.innerHTML = pill(String(incomingState).toUpperCase());
-          if (data.timestamp)
-            lastCell.textContent = new Date(data.timestamp).toLocaleString();
+
+          const ts = apiTimestamp || data.timestamp;
+          if (ts && lastCell)
+            lastCell.textContent = new Date(ts).toLocaleString();
         }
-        // If selected, update telemetry panel
+
+        // If selected, update telemetry panel from SSE payload (still useful for live values)
         if (String(selectedCp) === String(uid)) {
           updateTelemetryPanel(data);
         }
-        console.log("Telemetry (SSE)", uid, data);
+        console.log("Telemetry (SSE)", uid, data, "(apiState=", apiState, ")");
       } catch (e) {
         console.error("Failed to parse SSE telemetry", e);
       }
