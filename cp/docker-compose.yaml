@@ -4,7 +4,7 @@ services:
     build: ./ev_cp_m
     image: ev_cp_m:latest
     ports:
-      - "${MONITOR_HOST}:${MONITOR_HOST_PORT}:5051" # monitor engine socket now maps to container port 5051
+      - "${MONITOR_HOST}:${MONITOR_HOST_PORT}:${MONITOR_HOST_PORT}" # monitor engine socket now maps to container port 5051
     command: "${MONITOR_COMMAND}"
     environment:
       - CHARGER_ID=${CHARGER_ID:-1000}
