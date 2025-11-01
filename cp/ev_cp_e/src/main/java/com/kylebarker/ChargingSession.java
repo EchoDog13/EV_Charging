@@ -11,7 +11,12 @@ public class ChargingSession {
     private long pausedTime;
     private long totalPausedDuration;
     private double energyConsumed;
-    private String status; // HOLD, IN_PROGRESS, PAUSED, COMPLETED
+    // Session-specific transient state is still tracked here for lifecycle
+    // timing, but the canonical shared state is stored in
+    // ChargingStation.GLOBAL_STATE.
+    // We'll keep a localStatus for internal checks but expose/get/set via
+    // ChargingStation.GLOBAL_STATE.
+    private String localStatus; // HOLD, IN_PROGRESS, PAUSED, COMPLETED
     private boolean chargerConnected;
     private final double powerKw = 7.0; // example: 7 kW charger
 
@@ -19,7 +24,7 @@ public class ChargingSession {
         this.sessionId = UUID.randomUUID().toString();
         this.chargerId = chargerId;
         this.driverId = driverId;
-        this.status = "HOLD"; // waiting for plug
+        this.localStatus = "HOLD"; // waiting for plug
         this.chargerConnected = false;
         this.energyConsumed = 0.0;
         this.totalPausedDuration = 0;
@@ -44,7 +49,16 @@ public class ChargingSession {
     }
 
     public String getStatus() {
-        return status;
+        // Return the global state if it's set to a known session-level value,
+        // otherwise fall back to the session's localStatus.
+        try {
+            String g = ChargingStation.GLOBAL_STATE;
+            if (g != null && !g.isBlank()) {
+                return g;
+            }
+        } catch (Exception ignored) {
+        }
+        return localStatus;
     }
 
     public double getEnergyConsumed() {
@@ -62,11 +76,12 @@ public class ChargingSession {
 
     public void plugIn() {
         chargerConnected = true;
-        if (status.equals("HOLD")) {
-            status = "IN_PROGRESS";
+        if ("HOLD".equals(ChargingStation.GLOBAL_STATE)) {
+            localStatus = "IN_PROGRESS";
+            ChargingStation.GLOBAL_STATE = "IN_PROGRESS";
             startTime = System.currentTimeMillis();
             System.out.println("Charger " + chargerId + " plugged in and session started.");
-        } else if (status.equals("PAUSED")) {
+        } else if ("PAUSED".equals(ChargingStation.GLOBAL_STATE)) {
             // resume accounting for paused duration
             resume();
             System.out.println("Charger " + chargerId + " re-plugged and session resumed.");
@@ -77,23 +92,25 @@ public class ChargingSession {
 
     public void unplug() {
         chargerConnected = false;
-        if (status.equals("IN_PROGRESS")) {
+        if ("IN_PROGRESS".equals(ChargingStation.GLOBAL_STATE)) {
             pause();
         }
         System.out.println("Charger " + chargerId + " unplugged.");
     }
 
     public void pause() {
-        if (status.equals("IN_PROGRESS")) {
-            status = "PAUSED";
+        if ("IN_PROGRESS".equals(ChargingStation.GLOBAL_STATE)) {
+            localStatus = "PAUSED";
+            ChargingStation.GLOBAL_STATE = "PAUSED";
             pausedTime = System.currentTimeMillis();
             System.out.println("Session " + sessionId + " paused.");
         }
     }
 
     public void resume() {
-        if (status.equals("PAUSED")) {
-            status = "IN_PROGRESS";
+        if ("PAUSED".equals(ChargingStation.GLOBAL_STATE)) {
+            localStatus = "IN_PROGRESS";
+            ChargingStation.GLOBAL_STATE = "IN_PROGRESS";
             totalPausedDuration += System.currentTimeMillis() - pausedTime;
             System.out.println("Session " + sessionId + " resumed.");
         }
@@ -101,14 +118,15 @@ public class ChargingSession {
 
     public void end() {
         updateEnergy();
-        status = "COMPLETED";
+        localStatus = "COMPLETED";
+        ChargingStation.GLOBAL_STATE = "COMPLETED";
         System.out.println("Session " + sessionId + " completed. Energy: "
                 + String.format("%.3f", energyConsumed) + " kWh, Cost: $"
                 + String.format("%.2f", getTotalCost()));
     }
 
     public void updateEnergy() {
-        if (status.equals("IN_PROGRESS") && chargerConnected) {
+        if ("IN_PROGRESS".equals(ChargingStation.GLOBAL_STATE) && chargerConnected) {
             long currentTime = System.currentTimeMillis();
             long effectiveTime = currentTime - startTime - totalPausedDuration;
             energyConsumed = (effectiveTime / 1000.0 / 3600.0) * powerKw; // kWh
@@ -118,7 +136,7 @@ public class ChargingSession {
     public void printStatus() {
         updateEnergy();
         System.out.println("Session " + sessionId + " | Charger: " + chargerId
-                + " | Status: " + status
+                + " | Status: " + getStatus()
                 + " | Energy: " + String.format("%.3f", energyConsumed) + " kWh"
                 + " | Cost: $" + String.format("%.2f", getTotalCost()));
     }
@@ -128,12 +146,17 @@ public class ChargingSession {
         return "Session " + sessionId +
                 " | Charger: " + chargerId +
                 " | Driver: " + driverId +
-                " | Status: " + status +
+                " | Status: " + getStatus() +
                 " | Energy: " + String.format("%.3f", energyConsumed) + " kWh" +
                 " | Cost: $" + String.format("%.2f", getTotalCost());
     }
 
     public void setState(String newState) {
-        this.status = newState;
+        // set both local and global state
+        this.localStatus = newState;
+        try {
+            ChargingStation.GLOBAL_STATE = newState;
+        } catch (Exception ignored) {
+        }
     }
 }

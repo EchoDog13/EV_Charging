@@ -25,8 +25,9 @@ public class ChargingStation {
 
     private final String chargerId;
     private final KafkaSender kafkaSender;
-    private final EngineClient engineClient;
-    private String globalState;
+    // Single global public state variable shared by all sessions and other classes.
+    // Made public and volatile so other threads/classes can read/write safely.
+    public static volatile String GLOBAL_STATE = "activated";
 
     // Charger ID is now required to be supplied via configuration; no
     // auto-generation.
@@ -42,29 +43,26 @@ public class ChargingStation {
 
     // Return a simple state string for the given charger id.
     // Maps internal session statuses to friendly states expected by the UI / API.
+    // The global state is used when there is no active session for the charger.
     public String getState(String chargerId) {
         ChargingSession session = activeSessionsByCharger.get(chargerId);
         if (session == null) {
-            // No active session — treat as available/activated
+            // No active session — return GLOBAL_STATE if set, otherwise "activated"
+            return (GLOBAL_STATE != null && !GLOBAL_STATE.isBlank()) ? GLOBAL_STATE : "activated";
+        }
 
-            if (globalState == null) {
-                return "activated";
-            } else {
-                return globalState;
-            }
-            String status = session.getStatus();
-            switch (status) {
-                case "IN_PROGRESS":
-                    return "supplying";
-                case "HOLD":
-                    return "waiting";
-                case "PAUSED":
-                    return "paused";
-                case "COMPLETED":
-                    return "completed";
-                default:
-                    return status.toLowerCase();
-            }
+        String status = session.getStatus();
+        switch (status) {
+            case "IN_PROGRESS":
+                return "supplying";
+            case "HOLD":
+                return "waiting";
+            case "PAUSED":
+                return "paused";
+            case "COMPLETED":
+                return "completed";
+            default:
+                return status.toLowerCase();
         }
     }
 
@@ -77,8 +75,8 @@ public class ChargingStation {
         this.kafkaSender = kafkaSender;
 
         // Start the plain socket EngineClient (not managed by Spring)
+        // Keep a local reference so we can shut it down on JVM exit.
         EngineClient client = new EngineClient(this);
-        this.engineClient = client;
 
         // ensure we shutdown the engine client on JVM exit
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -142,8 +140,8 @@ public class ChargingStation {
 
     // Update local state of the charging point
     public String updateState(String chargerId, String state) {
-        // Example: just log for now
-        globalState = state;
+        // Update the single global state variable
+        GLOBAL_STATE = state;
         return "Updated charger " + chargerId + " state to " + state;
     }
 
