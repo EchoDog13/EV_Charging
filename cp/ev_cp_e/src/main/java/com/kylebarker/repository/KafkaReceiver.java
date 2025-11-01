@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kylebarker.ChargingSession;
 import com.kylebarker.ChargingStation;
 
+import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -35,7 +37,7 @@ public class KafkaReceiver {
     private String localChargerId;
 
     @KafkaListener(topics = { "CP", "broadcast" }, groupId = "ev_central_group")
-    public void listen(String message) {
+    public void listen(Map<String, Object> message) {
         System.out.println("Received message: " + message);
         // Keep a local record for the UI to read
         try {
@@ -43,13 +45,12 @@ public class KafkaReceiver {
         } catch (Exception ignored) {
         }
         try {
-            JsonNode json = objectMapper.readTree(message);
+            JsonNode json = objectMapper.valueToTree(message);
             // Some producers (or accidental string-wrapping in Kafka messages) send
             // the JSON as a quoted string, e.g. "{\"type\":\"stopAll\"}".
             // In that case the root node is textual and we need to parse the inner
             // content to obtain the actual object fields.
             if (json.isTextual()) {
-                System.out.println("Received textual JSON wrapper; unwrapping inner JSON...");
                 json = objectMapper.readTree(json.asText());
             }
             String type = json.path("type").asText("default");
