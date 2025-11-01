@@ -11,12 +11,8 @@ public class ChargingSession {
     private long pausedTime;
     private long totalPausedDuration;
     private double energyConsumed;
-    // Session-specific transient state is still tracked here for lifecycle
-    // timing, but the canonical shared state is stored in
-    // ChargingStation.GLOBAL_STATE.
-    // We'll keep a localStatus for internal checks but expose/get/set via
-    // ChargingStation.GLOBAL_STATE.
-    private String localStatus; // HOLD, IN_PROGRESS, PAUSED, COMPLETED
+
+    // No per-session canonical status: use ChargingStation.GLOBAL_STATE instead.
     private boolean chargerConnected;
     private final double powerKw = 7.0; // example: 7 kW charger
 
@@ -24,7 +20,7 @@ public class ChargingSession {
         this.sessionId = UUID.randomUUID().toString();
         this.chargerId = chargerId;
         this.driverId = driverId;
-        this.localStatus = "HOLD"; // waiting for plug
+        // initial global state will be set by ChargingStation when session is created
         this.chargerConnected = false;
         this.energyConsumed = 0.0;
         this.totalPausedDuration = 0;
@@ -49,16 +45,9 @@ public class ChargingSession {
     }
 
     public String getStatus() {
-        // Return the global state if it's set to a known session-level value,
-        // otherwise fall back to the session's localStatus.
-        try {
-            String g = ChargingStation.GLOBAL_STATE;
-            if (g != null && !g.isBlank()) {
-                return g;
-            }
-        } catch (Exception ignored) {
-        }
-        return localStatus;
+        // Return the canonical global state if set, otherwise default to "HOLD"
+        String g = ChargingStation.GLOBAL_STATE;
+        return (g != null && !g.isBlank()) ? g : "HOLD";
     }
 
     public double getEnergyConsumed() {
@@ -77,7 +66,6 @@ public class ChargingSession {
     public void plugIn() {
         chargerConnected = true;
         if ("HOLD".equals(ChargingStation.GLOBAL_STATE)) {
-            localStatus = "IN_PROGRESS";
             ChargingStation.GLOBAL_STATE = "IN_PROGRESS";
             startTime = System.currentTimeMillis();
             System.out.println("Charger " + chargerId + " plugged in and session started.");
@@ -85,6 +73,7 @@ public class ChargingSession {
             // resume accounting for paused duration
             resume();
             System.out.println("Charger " + chargerId + " re-plugged and session resumed.");
+
         } else {
             System.out.println("Charger " + chargerId + " plugged in.");
         }
@@ -100,7 +89,6 @@ public class ChargingSession {
 
     public void pause() {
         if ("IN_PROGRESS".equals(ChargingStation.GLOBAL_STATE)) {
-            localStatus = "PAUSED";
             ChargingStation.GLOBAL_STATE = "PAUSED";
             pausedTime = System.currentTimeMillis();
             System.out.println("Session " + sessionId + " paused.");
@@ -109,7 +97,6 @@ public class ChargingSession {
 
     public void resume() {
         if ("PAUSED".equals(ChargingStation.GLOBAL_STATE)) {
-            localStatus = "IN_PROGRESS";
             ChargingStation.GLOBAL_STATE = "IN_PROGRESS";
             totalPausedDuration += System.currentTimeMillis() - pausedTime;
             System.out.println("Session " + sessionId + " resumed.");
@@ -118,7 +105,6 @@ public class ChargingSession {
 
     public void end() {
         updateEnergy();
-        localStatus = "COMPLETED";
         ChargingStation.GLOBAL_STATE = "COMPLETED";
         System.out.println("Session " + sessionId + " completed. Energy: "
                 + String.format("%.3f", energyConsumed) + " kWh, Cost: $"
@@ -152,11 +138,7 @@ public class ChargingSession {
     }
 
     public void setState(String newState) {
-        // set both local and global state
-        this.localStatus = newState;
-        try {
-            ChargingStation.GLOBAL_STATE = newState;
-        } catch (Exception ignored) {
-        }
+        // Only update the canonical global state
+        ChargingStation.GLOBAL_STATE = newState;
     }
 }

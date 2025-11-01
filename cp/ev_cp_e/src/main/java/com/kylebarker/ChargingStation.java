@@ -161,6 +161,8 @@ public class ChargingStation {
         ChargingSession session = new ChargingSession(chargerId, driverId);
         activeSessionsByCharger.put(chargerId, session);
         activeSessionsById.put(session.getSessionId(), session);
+        // Ensure the global state reflects that a session is waiting for plug
+        GLOBAL_STATE = "HOLD";
         return "Created new session (waiting for plug): " + session.getSessionId();
     }
 
