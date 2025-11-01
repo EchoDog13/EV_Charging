@@ -16,27 +16,27 @@ services:
     deploy:
       replicas: 1
 
-  engine:
-    build: ./ev_cp_e
-    image: ev_engine:latest
-    ports:
-      - "${ENGINE_HOST}:${ENGINE_HOST_PORT}:8080" # engine REST API
-    environment:
-      - CHARGER_ID=${CHARGER_ID:-1000}
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=100.83.66.30:9092
-      - SPRING_APPLICATION_NAME=${CHARGER_ID}-GROUP
-      - ENGINE_HOST=100.123.78.116
-      - ENGINE_PORT=${MONITOR_HOST_PORT}
-      - MONITOR_HOST_PORT=${MONITOR_HOST_PORT}
-      - SPRING_KAFKA_CONSUMER_GROUP_ID=${CHARGER_ID}-GROUP
-
-    command: >
-      sh -c "
-      echo 'Waiting for monitor to start...' &&
-      sleep 7 &&
-      java -Dcharger.id=$CHARGER_ID -jar app.jar
-      "
-    depends_on:
-      - monitor
-    deploy:
-      replicas: 1
+engine:
+  build: ./ev_cp_e
+  image: ev_engine:latest
+  ports:
+    - "${ENGINE_HOST}:${ENGINE_HOST_PORT}:8080"
+  environment:
+    - CHARGER_ID=${CHARGER_ID:-1000}
+    - SPRING_KAFKA_BOOTSTRAP_SERVERS=100.83.66.30:9092
+    - SPRING_APPLICATION_NAME=${CHARGER_ID}-GROUP
+    - ENGINE_HOST=100.123.78.116
+    - ENGINE_PORT=${MONITOR_HOST_PORT}
+    - MONITOR_HOST_PORT=${MONITOR_HOST_PORT}
+    # UNIQUE GROUP PER CHARGER
+    - SPRING_KAFKA_CONSUMER_GROUP_ID=ev_central_group_${CHARGER_ID}
+  command: >
+    sh -c "
+    echo 'Waiting for monitor to start...' &&
+    sleep 7 &&
+    java -Dcharger.id=$CHARGER_ID -jar app.jar
+    "
+  depends_on:
+    - monitor
+  deploy:
+    replicas: 1
