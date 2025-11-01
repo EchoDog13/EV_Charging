@@ -52,7 +52,7 @@ function render(list) {
     <tr data-uid="${ch.uid}">
       <td>${ch.uid}</td>
       <td>${ch.location || ""}</td>
-      <td>${(ch.pricePerKWh ?? 0).toFixed(2)}</td>
+      <td>${(ch.pricePerKW ?? 0).toFixed(2)}</td>
       <td class="state">${pill(ch.state)}</td>
       <td class="last">${fmt(ch.lastHealthCheck)}</td>
       <td>

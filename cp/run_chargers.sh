@@ -57,6 +57,7 @@ for i in $(seq 1 $NUM_CHARGERS); do
     export KAFKA_BROKER=$KAFKA_BROKER
     export MONITOR_HOST=$MONITOR_HOST
     export ENGINE_HOST=$ENGINE_HOST
+    export CHARGER_LOCATION="University of Waikato $i"
 
     # Start containers with docker-compose
     docker compose -p "$PROJECT_NAME" up -d --build --force-recreate

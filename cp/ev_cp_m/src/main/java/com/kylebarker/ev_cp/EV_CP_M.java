@@ -48,7 +48,7 @@ public class EV_CP_M implements Runnable {
 
     // @Option(names = { "-l", "--location" }, description = "Charging point
     // location")
-    String cpLocation;
+    String cpLocation = System.getenv().getOrDefault("CHARGER_LOCATION", "Unknown Location");
 
     private volatile Socket centralSocket = null;
     private volatile BufferedReader in = null;
