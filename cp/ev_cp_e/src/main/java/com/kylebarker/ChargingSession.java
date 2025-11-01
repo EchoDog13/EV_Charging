@@ -132,4 +132,8 @@ public class ChargingSession {
                 " | Energy: " + String.format("%.3f", energyConsumed) + " kWh" +
                 " | Cost: $" + String.format("%.2f", getTotalCost());
     }
+
+    public void setState(String newState) {
+        this.status = newState;
+    }
 }

@@ -87,25 +87,18 @@ function render(list) {
     btn.addEventListener("click", async (ev) => {
       ev.stopPropagation(); // prevent row click selection
       const uid = btn.getAttribute("data-uid");
-      const driverId = prompt("Driver ID (optional):");
       try {
-        const params = driverId
-          ? `?driverId=${encodeURIComponent(driverId)}`
-          : "";
-        const res = await fetch(
-          `${API_BASE}/central/cps/${uid}/stop${params}`,
-          {
-            method: "POST",
-          }
-        );
+        const res = await fetch(`${API_BASE}/central/cps/${uid}/stop`, {
+          method: "POST",
+        });
         if (!res.ok) throw new Error(`Stop failed: ${res.status}`);
         alert(`Stop command sent for charger ${uid}`);
-        // optimistic UI: mark state as STOPPED
-        const row = document.querySelector(`tr[data-uid='${uid}']`);
-        if (row) {
-          const stateCell = row.querySelector(".state");
-          if (stateCell) stateCell.innerHTML = pill("STOPPED");
-        }
+        // // optimistic UI: mark state as STOPPED
+        // const row = document.querySelector(`tr[data-uid='${uid}']`);
+        // if (row) {
+        //   const stateCell = row.querySelector(".state");
+        //   if (stateCell) stateCell.innerHTML = pill("STOPPED");
+        // }
       } catch (e) {
         console.error(e);
         alert("Failed to send stop command");

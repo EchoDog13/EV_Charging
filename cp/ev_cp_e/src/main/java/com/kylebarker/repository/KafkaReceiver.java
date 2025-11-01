@@ -23,6 +23,7 @@ public class KafkaReceiver {
     }
 
     private final KafkaSender kafkaSender;
+    private String newState;
 
     // Make the local charger ID configurable via application.properties or
     // environment variable.
@@ -33,7 +34,7 @@ public class KafkaReceiver {
     @Value("${charger.id}")
     private String localChargerId;
 
-    @KafkaListener(topics = "CP", groupId = "ev_central_group")
+    @KafkaListener(topics = { "CP", "broadcast" }, groupId = "ev_central_group")
     public void listen(String message) {
         System.out.println("Received message: " + message);
         // Keep a local record for the UI to read
@@ -52,6 +53,9 @@ public class KafkaReceiver {
                 json = objectMapper.readTree(json.asText());
             }
             String type = json.path("type").asText("default");
+            if (json.has("state") && type.equals("state_change")) {
+                newState = json.path("state").asText();
+            }
             // Do NOT default missing chargerId to the local charger. If absent, treat as
             // null and
             // ignore (for non-global messages). This prevents accidental creation of
@@ -91,6 +95,7 @@ public class KafkaReceiver {
                 case "pauseAll" -> pauseAllSessions();
                 case "resumeAll" -> resumeAllSessions();
                 case "status" -> printStatus();
+                case "state_change" -> stateChange();
                 default -> System.out.println("Unknown message type: " + type);
             }
 
@@ -114,6 +119,11 @@ public class KafkaReceiver {
         // once the vehicle is physically connected.
         messageString = "🟢 New charging session created (HOLD awaiting plug): " + startResult;
         station.addMessage(messageString);
+    }
+
+    private void stateChange() {
+        station.addMessage("State Change recieved. New State: " + newState);
+        station.stateChange(localChargerId, newState);
     }
 
     private void handleStopCharging() {

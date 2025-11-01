@@ -278,7 +278,7 @@ public class ChargerController {
     @PostMapping("/stop/{chargerId}")
     public String stopCharging(@PathVariable Long chargerId) {
         JSONObject response = new JSONObject();
-        response.put("type", "stopCharging");
+        response.put("type", "OUT_OF_ORDER");
         response.put("uid", chargerId);
 
         // Persist OUT_OF_ORDER only if the charger is present and not DISCONNECTED
@@ -291,11 +291,11 @@ public class ChargerController {
                 m.put("uid", ch.getUid());
                 m.put("state", chargerState.OUT_OF_ORDER.name());
                 messages.put(UUID.randomUUID().toString(), m);
-                kafkaSender.send("CP", m.toString());
+                kafkaSender.send("broadcast", m.toString());
             }
         });
 
-        kafkaSender.send("CP", response.toString());
+        kafkaSender.send("broadcast", response.toString());
         messages.put(UUID.randomUUID().toString(), response);
         return "Stop command sent for charger " + chargerId;
     }
@@ -322,14 +322,12 @@ public class ChargerController {
                 JSONObject m = new JSONObject();
                 m.put("type", "state_change");
                 m.put("uid", ch.getUid());
-                m.put("state", chargerState.OUT_OF_ORDER.name());
+                m.put("state", chargerState.STOPPED.name());
                 messages.put(UUID.randomUUID().toString(), m);
-                kafkaSender.send("CP", m.toString());
+                kafkaSender.send("broadcast", m.toString());
             });
         } catch (NumberFormatException ignore) {
         }
-
-        kafkaSender.send("CP", msg.toString());
         messages.put(UUID.randomUUID().toString(), msg);
         return ResponseEntity.ok("Stop command sent for charger " + cpUid + " and state persisted");
     }
@@ -347,7 +345,7 @@ public class ChargerController {
                 m.put("uid", ch.getUid());
                 m.put("state", chargerState.ACTIVATED.name());
                 messages.put(UUID.randomUUID().toString(), m);
-                kafkaSender.send("CP", m.toString());
+                kafkaSender.send("broadcast", m.toString());
             });
             return ResponseEntity.ok("Resume command sent for charger " + cpUid);
         } catch (NumberFormatException ex) {
