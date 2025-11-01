@@ -124,7 +124,7 @@ public class KafkaReceiver {
 
     private void stateChange() {
         station.addMessage("State Change recieved. New State: " + newState);
-        station.stateChange(localChargerId, newState);
+        station.updateState(localChargerId, newState);
     }
 
     private void handleStopCharging() {

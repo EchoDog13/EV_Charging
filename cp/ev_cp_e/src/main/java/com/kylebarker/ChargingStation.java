@@ -332,12 +332,4 @@ public class ChargingStation {
         return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
-    public void stateChange(String chargerId, String newState) {
-        ChargingSession session = activeSessionsByCharger.get(chargerId);
-        try {
-            session.setState(newState);
-        } catch (Exception e) {
-            System.err.println("Failed to notify engine of state change: " + e.getMessage());
-        }
-    }
 }
