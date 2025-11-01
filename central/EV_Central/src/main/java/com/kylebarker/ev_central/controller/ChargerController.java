@@ -10,7 +10,6 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.http.ResponseEntity;
 import com.kylebarker.ev_central.model.chargerState;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.bind.annotation.CrossOrigin;
 
 import jakarta.validation.*;
 import java.util.List;
@@ -303,32 +302,43 @@ public class ChargerController {
     // Stop individual charging session (new: publishes 'chargerId' and optional
     // driverId)
     @PostMapping("/cps/{cpUid}/stop")
-    public ResponseEntity<String> stopChargingWithDriver(@PathVariable String cpUid,
+    public ResponseEntity<String> stopChargingWithDriver(
+            @PathVariable String cpUid,
             @RequestParam(required = false) String driverId) {
-        // Persist OUT_OF_ORDER for this charger and notify CP
+
+        // Build the stopCharging message
         JSONObject msg = new JSONObject();
         msg.put("type", "stopCharging");
         msg.put("chargerId", cpUid);
         if (driverId != null && !driverId.isBlank()) {
             msg.put("driverId", driverId);
         }
+
         try {
             Long uid = Long.parseLong(cpUid);
             repository.findById(uid).ifPresent(ch -> {
                 if (ch.getState() == null || ch.getState() == chargerState.DISCONNECTED)
                     return;
+
                 ch.setState(chargerState.OUT_OF_ORDER);
                 repository.save(ch);
+
+                // Build state_change message
                 JSONObject m = new JSONObject();
                 m.put("type", "state_change");
                 m.put("uid", ch.getUid());
                 m.put("state", chargerState.STOPPED.name());
+
                 messages.put(UUID.randomUUID().toString(), m);
-                kafkaSender.send("broadcast", m.toString());
+
+                // ✅ Send as Map instead of string — avoids extra escaping
+                kafkaSender.send("broadcast", m.toMap());
             });
         } catch (NumberFormatException ignore) {
         }
+
         messages.put(UUID.randomUUID().toString(), msg);
+
         return ResponseEntity.ok("Stop command sent for charger " + cpUid + " and state persisted");
     }
 
