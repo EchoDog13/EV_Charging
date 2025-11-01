@@ -49,22 +49,22 @@ public class ChargingStation {
 
             if (globalState == null) {
                 return "activated";
-            }
-            else {
+            } else {
                 return globalState;
-        }
-        String status = session.getStatus();
-        switch (status) {
-            case "IN_PROGRESS":
-                return "supplying";
-            case "HOLD":
-                return "waiting";
-            case "PAUSED":
-                return "paused";
-            case "COMPLETED":
-                return "completed";
-            default:
-                return status.toLowerCase();
+            }
+            String status = session.getStatus();
+            switch (status) {
+                case "IN_PROGRESS":
+                    return "supplying";
+                case "HOLD":
+                    return "waiting";
+                case "PAUSED":
+                    return "paused";
+                case "COMPLETED":
+                    return "completed";
+                default:
+                    return status.toLowerCase();
+            }
         }
     }
 
