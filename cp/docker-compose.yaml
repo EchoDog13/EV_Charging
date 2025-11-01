@@ -28,6 +28,7 @@ services:
       - ENGINE_HOST=100.123.78.116
       - ENGINE_PORT=${MONITOR_HOST_PORT}
       - MONITOR_HOST_PORT=${MONITOR_HOST_PORT}
+      - SPRING_KAFKA_CONSUMER_GROUP_ID=${CHARGER_ID}-GROUP
 
     command: >
       sh -c "

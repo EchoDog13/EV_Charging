@@ -326,7 +326,7 @@ public class ChargerController {
                 // Build state_change message
                 JSONObject m = new JSONObject();
                 m.put("type", "state_change");
-                m.put("uid", ch.getUid());
+                m.put("cpUid", ch.getUid());
                 m.put("state", chargerState.STOPPED.name());
 
                 messages.put(UUID.randomUUID().toString(), m);
