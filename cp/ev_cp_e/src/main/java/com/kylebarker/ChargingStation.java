@@ -26,6 +26,7 @@ public class ChargingStation {
     private final String chargerId;
     private final KafkaSender kafkaSender;
     private final EngineClient engineClient;
+    private String globalState;
 
     // Charger ID is now required to be supplied via configuration; no
     // auto-generation.
@@ -45,7 +46,12 @@ public class ChargingStation {
         ChargingSession session = activeSessionsByCharger.get(chargerId);
         if (session == null) {
             // No active session — treat as available/activated
-            return "activated";
+
+            if (globalState == null) {
+                return "activated";
+            }
+            else {
+                return globalState;
         }
         String status = session.getStatus();
         switch (status) {
@@ -137,6 +143,7 @@ public class ChargingStation {
     // Update local state of the charging point
     public String updateState(String chargerId, String state) {
         // Example: just log for now
+        globalState = state;
         return "Updated charger " + chargerId + " state to " + state;
     }
 
