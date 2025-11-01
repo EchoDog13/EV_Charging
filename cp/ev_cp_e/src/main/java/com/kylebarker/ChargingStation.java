@@ -143,12 +143,34 @@ public class ChargingStation {
     // Update local state of the charging point
     public String updateState(String chargerId, String state) {
         // Update the single global state variable
-        GLOBAL_STATE = state;
-        return "Updated charger " + chargerId + " state to " + state;
+        String newState = (state == null) ? "" : state.trim();
+        GLOBAL_STATE = newState;
+
+        // If entering STOPPED, end/unplug any active sessions and prevent new ones
+        if ("STOPPED".equalsIgnoreCase(newState)) {
+            // Copy active sessions to avoid concurrent modification while removing
+            java.util.List<ChargingSession> sessions = new java.util.ArrayList<>(activeSessionsByCharger.values());
+            for (ChargingSession s : sessions) {
+                try {
+                    // Use existing unplug flow to end session, publish receipt and remove mappings
+                    unplug(s.getChargerId());
+                } catch (Exception ex) {
+                    System.err.println("Failed to stop session " + s.getSessionId() + ": " + ex.getMessage());
+                }
+            }
+            addMessage("Charger " + chargerId + " entered STOPPED state; all sessions terminated and unplugged.");
+            return "Updated charger " + chargerId + " state to " + newState + ". All sessions stopped.";
+        }
+
+        return "Updated charger " + chargerId + " state to " + newState;
     }
 
     // Start session by chargerId
     public String startSession(String chargerId, String driverId) {
+        // Reject creating new sessions while the charger is stopped
+        if ("STOPPED".equalsIgnoreCase(GLOBAL_STATE)) {
+            return "Charger " + chargerId + " is stopped and not accepting sessions.";
+        }
         ChargingSession existing = activeSessionsByCharger.get(chargerId);
         if (existing != null) {
             if (existing.getStatus().equals("PAUSED")) {
@@ -168,6 +190,10 @@ public class ChargingStation {
 
     // Start session by sessionId
     public String startSessionById(String sessionId) {
+        // Reject starting/resuming sessions while charger is stopped
+        if ("STOPPED".equalsIgnoreCase(GLOBAL_STATE)) {
+            return "Charger is stopped and will not start sessions.";
+        }
         ChargingSession session = activeSessionsById.get(sessionId);
         if (session == null)
             return "No session found with ID " + sessionId;
