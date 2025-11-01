@@ -37,33 +37,31 @@ public class KafkaReceiver {
     private String localChargerId;
 
     @KafkaListener(topics = { "CP", "broadcast" }, groupId = "ev_central_group")
-    public void listen(Map<String, Object> message) {
-        System.out.println("Received message: " + message);
+    public void listen(String message) {
+        System.out.println("Received raw message: " + message);
+
         // Keep a local record for the UI to read
         try {
             station.addMessage("RECV CP: " + message);
         } catch (Exception ignored) {
         }
+
         try {
-            JsonNode json = objectMapper.valueToTree(message);
-            // Some producers (or accidental string-wrapping in Kafka messages) send
-            // the JSON as a quoted string, e.g. "{\"type\":\"stopAll\"}".
-            // In that case the root node is textual and we need to parse the inner
-            // content to obtain the actual object fields.
+            JsonNode json = objectMapper.readTree(message);
+
+            // Handle case where message is a quoted JSON string, e.g.
+            // "{\"type\":\"stopAll\"}"
             if (json.isTextual()) {
                 json = objectMapper.readTree(json.asText());
             }
+
             String type = json.path("type").asText("default");
+
             if (json.has("state") && type.equals("state_change")) {
                 newState = json.path("state").asText();
             }
-            // Do NOT default missing chargerId to the local charger. If absent, treat as
-            // null and
-            // ignore (for non-global messages). This prevents accidental creation of
-            // sessions on
-            // the local charger when the incoming message omitted the field.
-            // Accept either "chargerId" or the driver/central field name "cpUid" so
-            // external producers that use cpUid still work.
+
+            // Extract chargerId from either "chargerId" or "cpUid"
             String chargerId = null;
             if (json.has("chargerId")) {
                 chargerId = json.get("chargerId").asText(null);
@@ -72,7 +70,7 @@ public class KafkaReceiver {
             }
             String driverId = json.path("driverId").asText("unknown");
 
-            // global pause/resume messages have no charger ID, so skip check
+            // Skip chargerId check for global commands
             if (!type.equals("stopAll") && !type.equals("startAll")) {
                 if (chargerId == null) {
                     System.out.println("Ignoring message without chargerId for type '" + type + "'");
@@ -85,6 +83,7 @@ public class KafkaReceiver {
                 }
             }
 
+            // Handle command types
             switch (type) {
                 case "startCharging" -> handleStartCharging(driverId);
                 case "stopCharging" -> handleStopCharging();
@@ -102,6 +101,7 @@ public class KafkaReceiver {
 
         } catch (Exception e) {
             System.err.println("Failed to process message: " + e.getMessage());
+            e.printStackTrace(); // Optional: for debugging
         }
     }
 
