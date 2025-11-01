@@ -24,7 +24,9 @@ public class ChargingStation {
     private final Deque<String> recentMessages = new ConcurrentLinkedDeque<>();
 
     private final String chargerId;
+
     private final KafkaSender kafkaSender;
+
     // Single global public state variable shared by all sessions and other classes.
     // Made public and volatile so other threads/classes can read/write safely.
     public static volatile String GLOBAL_STATE = "activated";
