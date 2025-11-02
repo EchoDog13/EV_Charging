@@ -352,7 +352,7 @@ public class ChargerController {
                 repository.save(ch);
                 JSONObject m = new JSONObject();
                 m.put("type", "state_change");
-                m.put("uid", ch.getUid());
+                m.put("cpUid", ch.getUid());
                 m.put("state", chargerState.ACTIVATED.name());
                 messages.put(UUID.randomUUID().toString(), m);
                 kafkaSender.send("broadcast", m.toString());
