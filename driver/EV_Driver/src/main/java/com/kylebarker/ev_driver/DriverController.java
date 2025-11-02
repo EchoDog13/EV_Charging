@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
+@CrossOrigin("*")
 @RestController
 @RequestMapping("/driver")
 public class DriverController {
@@ -69,7 +70,7 @@ public class DriverController {
         try {
             Map<String, String> payload = Map.of(
                     "type", "unplug",
-                    "chargerId", cpUid);
+                    "cpUid", cpUid);
             kafkaProducerService.sendMessage("CP", payload);
 
             return "Unplug instruction published to CP topic";

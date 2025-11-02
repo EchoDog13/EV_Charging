@@ -17,6 +17,13 @@ const CENTRAL_BASE =
   (hasProto ? CENTRAL_IP : `http://${CENTRAL_IP}`) +
   (CENTRAL_PORT ? `:${CENTRAL_PORT}` : "");
 
+const DRIVER_API_BASE = "100.83.66.30:7040"; // driver API host:port (may omit protocol)
+// Ensure DRIVER_API_BASE contains protocol for fetch; default to http:// when absent
+const driverHasProto = /^https?:\/\//i.test(DRIVER_API_BASE);
+const DRIVER_BASE = driverHasProto
+  ? DRIVER_API_BASE
+  : `http://${DRIVER_API_BASE}`;
+
 const API = {
   // Central's CPS endpoint (absolute URL) — used by the front-end to list available CPs
   cps: `${CENTRAL_BASE}/central/cps`,
@@ -138,12 +145,12 @@ async function stopSession() {
 
   let url;
   if (cpUid) {
-    // POST /sessions/{cpUid}/stop on the central API base
-    // CENTRAL_BASE already points to central host/port
-    url = `${CENTRAL_BASE}/sessions/${cpUid}/stop`;
+    // Send stop command to the DRIVER API (driver service) so the device controller
+    // can act on the stop immediately: /driver/sessions/{cpUid}/stop
+    url = `${DRIVER_BASE}/driver/sessions/${cpUid}/stop`;
   } else if (sessionId) {
-    // fallback to driver-local endpoint using sessionId
-    url = API.stop(sessionId);
+    // fallback to driver-local endpoint using sessionId on the driver API host
+    url = `${DRIVER_BASE}/driver/sessions/${sessionId}/stop`;
   } else {
     alert("Select a CP or enter a sessionId");
     return;
