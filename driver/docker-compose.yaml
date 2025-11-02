@@ -7,7 +7,7 @@ services:
       dockerfile: dockerfile
     container_name: ev-driver
     ports:
-      - "100.83.66.30:7040:8080"
+      - "100.74.162.58:7040:8080"
     image: ev_driver:latest
     restart: unless-stopped
     environment:
