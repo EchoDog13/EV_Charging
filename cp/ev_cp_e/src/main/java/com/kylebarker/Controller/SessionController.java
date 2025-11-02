@@ -177,4 +177,12 @@ public class SessionController {
         }
         return station.stopSession(cpUid);
     }
+
+    @PostMapping("central/cps/{cpUid}/resume")
+    public String centralResume(@PathVariable String cpUid) {
+        if (!cpUid.equals(station.getChargerId())) {
+            return "This CP instance is configured as " + station.getChargerId() + ". Request targeted " + cpUid + ".";
+        }
+        return station.updateState(cpUid, "ACTIVATED");
+    }
 }

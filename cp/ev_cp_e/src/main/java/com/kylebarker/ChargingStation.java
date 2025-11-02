@@ -367,4 +367,9 @@ public class ChargingStation {
         return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
+    public String centralResume(String cpUid) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'centralResume'");
+    }
+
 }
