@@ -18,3 +18,8 @@ pre{margin:8px 0;background:#0f172a;border:1px solid #233;padding:10px;border-ra
 .DISCONNECTED{background:#445;color:#ccd}
 .STOPPED{background:#864;color:#feb}
 .FAULT{background:#833;color:#f88}
+
+/* Telemetry panel styles */
+#telemetry-panel{background:transparent;margin-top:8px}
+#telemetry-panel h3{margin:6px 0 8px;font-size:1rem}
+#telemetry-panel div{margin:4px 0}

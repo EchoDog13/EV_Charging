@@ -25,6 +25,18 @@
   <section class="card">
     <h2>Charging Session</h2>
     <button id="btnStopSession">Stop Session</button>
+    
+    <!-- Telemetry panel: always visible and updated only when telemetry matches this driver's id -->
+    <div id="telemetry-panel" style="margin-top:12px;">
+      <h3>Telemetry</h3>
+      <div><strong>CP UID:</strong> <span id="t-cp">-</span></div>
+      <div><strong>Session:</strong> <span id="t-session">-</span></div>
+      <div><strong>Driver:</strong> <span id="t-driver">-</span></div>
+      <div><strong>Energy (kWh):</strong> <span id="t-energy">-</span></div>
+      <div><strong>Power (kW):</strong> <span id="t-power">-</span></div>
+      <div><strong>Cost (€):</strong> <span id="t-cost">-</span></div>
+      <div><strong>Last Telemetry:</strong> <span id="t-ts">-</span></div>
+    </div>
   </section>
 
   <section class="card">

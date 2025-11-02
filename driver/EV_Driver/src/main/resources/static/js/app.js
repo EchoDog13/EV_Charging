@@ -118,6 +118,10 @@ async function sendRequest() {
     window.currentCpUid = String(cpUid);
     const sel = document.querySelector("#cpSelect");
     if (sel) sel.disabled = true; // prevent changing while active
+    // Ensure we have an SSE subscription for the CP we just requested
+    try {
+      ensureTelemetrySse(String(cpUid));
+    } catch (e) {}
   }
   if ($("#requestId")) $("#requestId").value = data.requestId || "";
   if ($("#reqOut")) $("#reqOut").textContent = jfmt(data);
@@ -210,6 +214,14 @@ async function stopSim() {
 // Bind events (if elements exist on the page)
 $("#btnLoadCps") && ($("#btnLoadCps").onclick = loadCPs);
 $("#btnRequest") && ($("#btnRequest").onclick = sendRequest);
+// When the CP selection changes, open a telemetry SSE for the newly selected CP
+const cpSelectEl = document.querySelector("#cpSelect");
+if (cpSelectEl) {
+  cpSelectEl.addEventListener("change", (ev) => {
+    const v = ev.target.value;
+    if (v) ensureTelemetrySse(v);
+  });
+}
 $("#btnCheckReq") && ($("#btnCheckReq").onclick = checkRequest);
 $("#btnGetSession") && ($("#btnGetSession").onclick = getSession);
 $("#btnStopSession") && ($("#btnStopSession").onclick = stopSession);
@@ -219,3 +231,160 @@ $("#btnStopSim") && ($("#btnStopSim").onclick = stopSim);
 
 // Init
 loadCPs();
+
+// --- Telemetry handling (SSE from central) ---------------------------------
+// We will open EventSource streams per CP UID when listed. The panel below
+// will only update when the telemetry payload's driverId matches the Driver ID
+// input on the page (so the driver only sees sessions it is involved with).
+
+const telemetrySseMap = new Map();
+
+function updateTelemetryPanel(data, cpUid) {
+  const setText = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  };
+  // If data is null or falsy, clear/reset the panel
+  if (!data) {
+    setText("t-cp", cpUid || "-");
+    setText("t-session", "-");
+    setText("t-driver", "-");
+    setText("t-energy", "-");
+    setText("t-power", "-");
+    setText("t-cost", "-");
+    setText("t-ts", "-");
+    return;
+  }
+  setText("t-cp", cpUid || "-");
+  setText("t-session", data.sessionId || "-");
+  setText("t-driver", data.driverId != null ? String(data.driverId) : "-");
+  setText(
+    "t-energy",
+    data.energy_kWh != null ? Number(data.energy_kWh).toFixed(3) : "-"
+  );
+  setText(
+    "t-power",
+    data.power_kW != null ? Number(data.power_kW).toFixed(2) : "-"
+  );
+  setText(
+    "t-cost",
+    data.cost_eur != null ? Number(data.cost_eur).toFixed(4) : "-"
+  );
+  setText(
+    "t-ts",
+    data.timestamp ? new Date(data.timestamp).toLocaleString() : "-"
+  );
+}
+
+// Open SSE for given cpUid (if not already open). Uses Central's telemetry stream.
+function ensureTelemetrySse(cpUid) {
+  if (!cpUid) return;
+  if (telemetrySseMap.has(cpUid)) return;
+  try {
+    const url = `${CENTRAL_BASE}/central/telemetry/stream/${cpUid}`;
+    console.debug("driver: opening telemetry SSE for", cpUid, "->", url);
+    const src = new EventSource(url);
+    src.addEventListener("telemetry", (ev) => {
+      try {
+        const data = JSON.parse(ev.data);
+        console.debug("driver: telemetry event for", cpUid, data);
+        // Only show telemetry for this driver id
+        const pageDriverId = Number(
+          document.getElementById("driverId")?.value || 0
+        );
+        // Only update if driverId matches and if this driver has selected or active cpUid
+        const matchesDriver =
+          data.driverId != null && Number(data.driverId) === pageDriverId;
+        const currentCp =
+          window.currentCpUid ||
+          (document.querySelector("#cpSelect") &&
+            document.querySelector("#cpSelect").value);
+        const matchesCp = String(currentCp) === String(cpUid);
+        if (matchesDriver && matchesCp) {
+          updateTelemetryPanel(data, cpUid);
+        }
+      } catch (e) {
+        console.error("Failed to parse telemetry SSE", e);
+      }
+    });
+    // Fallback: some servers send unnamed 'message' events
+    src.onmessage = (ev) => {
+      try {
+        console.debug("driver: message event for", cpUid, ev.data);
+        const data = JSON.parse(ev.data);
+        const pageDriverId = Number(
+          document.getElementById("driverId")?.value || 0
+        );
+        const matchesDriver =
+          data.driverId != null && Number(data.driverId) === pageDriverId;
+        const currentCp =
+          window.currentCpUid ||
+          (document.querySelector("#cpSelect") &&
+            document.querySelector("#cpSelect").value);
+        const matchesCp = String(currentCp) === String(cpUid);
+        if (matchesDriver && matchesCp) updateTelemetryPanel(data, cpUid);
+      } catch (e) {
+        // ignore parse errors
+      }
+    };
+    src.onerror = (err) => {
+      console.warn("Telemetry SSE error for", cpUid, err);
+    };
+    telemetrySseMap.set(cpUid, src);
+  } catch (e) {
+    console.error("Failed to create telemetry SSE for", cpUid, e);
+  }
+}
+
+// Whenever CP list is loaded, ensure SSEs exist for those CPs (only activated ones)
+function ensureSsesForActive(list) {
+  if (!Array.isArray(list)) return;
+  list.forEach((c) => {
+    if (c && c.uid) ensureTelemetrySse(c.uid);
+  });
+}
+
+// Hook into loadCPs by wrapping it: after loading CPs we will call ensureSsesForActive
+const originalLoadCPs = loadCPs;
+loadCPs = async function () {
+  const res = await originalLoadCPs();
+  try {
+    // fetch the cps list directly so we can open SSEs (original loadCPs already fetched once,
+    // but to avoid changing it we fetch again here).
+    const r = await fetch(API.cps);
+    if (r.ok) {
+      const data = await r.json();
+      const active = Array.isArray(data)
+        ? data.filter((c) => (c.state || "").toLowerCase() === "activated")
+        : [];
+      ensureSsesForActive(active);
+      return data;
+    }
+  } catch (e) {
+    // ignore
+  }
+};
+
+// Make sure we open SSEs at least once for the active CPs on page load.
+// The original code called loadCPs() before we wrapped it; call it again
+// so the wrapped version can set up SSEs.
+try {
+  loadCPs().catch((e) => console.warn("loadCPs (wrapped) failed:", e));
+} catch (e) {
+  console.warn("loadCPs invocation failed:", e);
+}
+
+// When stopping a session, also clear current telemetry panel and close SSE for that cpUid
+const originalStopSession = stopSession;
+stopSession = async function () {
+  const cpUid = getCurrentCpUid();
+  await originalStopSession();
+  // clear UI
+  updateTelemetryPanel(null, "-");
+  if (cpUid && telemetrySseMap.has(cpUid)) {
+    try {
+      telemetrySseMap.get(cpUid).close();
+    } catch (e) {}
+    telemetrySseMap.delete(cpUid);
+  }
+};
