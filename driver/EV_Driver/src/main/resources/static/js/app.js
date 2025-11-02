@@ -20,7 +20,9 @@ const CENTRAL_BASE =
 const API = {
   // Central's CPS endpoint (absolute URL) — used by the front-end to list available CPs
   cps: `${CENTRAL_BASE}/central/cps`,
-  req: "/driver/charge-requests/${cpUid}/driver/${driverId}",
+  // make req a function so cpUid and driverId are interpolated into the path
+  req: (cpUid, driverId) =>
+    `/driver/charge-requests/${cpUid}/driver/${driverId}`,
   reqStatus: (id) => `/driver/charge-requests/${id}`,
   session: (id) => `/driver/sessions/${id}`,
   stop: (id) => `/driver/sessions/${id}/stop`,
@@ -75,19 +77,41 @@ async function loadCPs() {
   }
 }
 
+// Add helper for single authoritative cpUid
+window.currentCpUid = null;
+function getCurrentCpUid() {
+  // prefer stored cpUid, fall back to select value
+  return (
+    window.currentCpUid ||
+    (document.querySelector("#cpSelect") &&
+      document.querySelector("#cpSelect").value) ||
+    null
+  );
+}
+
 async function sendRequest() {
   const driverId = Number($("#driverId").value || 0);
-  const cpUid = Number($("#cpSelect").value || 0);
+  // cpUid may be a string UID; don't coerce to Number (it can become NaN)
+  const cpUid =
+    (document.querySelector("#cpSelect") &&
+      document.querySelector("#cpSelect").value) ||
+    "";
   if (!driverId || !cpUid) {
     alert("Set driverId and choose a CP");
     return;
   }
-  const res = await fetch(API.req, {
+  const res = await fetch(API.req(cpUid, driverId), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ driverId, cpUid }),
   });
   const data = await res.json();
+  // store the active cpUid when a request/session is created
+  if (data && (data.requestId || data.sessionId)) {
+    window.currentCpUid = String(cpUid);
+    const sel = document.querySelector("#cpSelect");
+    if (sel) sel.disabled = true; // prevent changing while active
+  }
   if ($("#requestId")) $("#requestId").value = data.requestId || "";
   if ($("#reqOut")) $("#reqOut").textContent = jfmt(data);
 }
@@ -105,14 +129,42 @@ async function checkRequest() {
 }
 
 async function stopSession() {
-  const id = $("#sessionId").value.trim();
-  if (!id) {
-    alert("Enter sessionId");
+  // use the single authoritative cpUid
+  const cpUid = getCurrentCpUid();
+  // Prefer stopping by CP UID (the central endpoint expects cpUid in the path).
+  // If no CP is selected, fall back to using a sessionId input (existing behavior).
+  const sessionInput = document.querySelector("#sessionId");
+  const sessionId = sessionInput ? sessionInput.value.trim() : "";
+
+  let url;
+  if (cpUid) {
+    // POST /sessions/{cpUid}/stop on the central API base
+    // CENTRAL_BASE already points to central host/port
+    url = `${CENTRAL_BASE}/sessions/${cpUid}/stop`;
+  } else if (sessionId) {
+    // fallback to driver-local endpoint using sessionId
+    url = API.stop(sessionId);
+  } else {
+    alert("Select a CP or enter a sessionId");
     return;
   }
-  const res = await fetch(API.stop(id), { method: "POST" });
-  const data = await res.json();
+
+  const res = await fetch(url, { method: "POST" });
+  let data;
+  try {
+    data = await res.json();
+  } catch (err) {
+    data = { status: res.status, ok: res.ok, message: "No JSON response" };
+  }
   if ($("#sessOut")) $("#sessOut").textContent = jfmt(data);
+  // after successful stop, clear stored cpUid and re-enable select
+  try {
+    // existing fetch...
+  } finally {
+    window.currentCpUid = null;
+    const sel = document.querySelector("#cpSelect");
+    if (sel) sel.disabled = false;
+  }
 }
 
 async function getTicket() {

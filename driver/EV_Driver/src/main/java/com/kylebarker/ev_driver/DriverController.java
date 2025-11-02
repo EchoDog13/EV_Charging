@@ -30,9 +30,9 @@ public class DriverController {
         return svc.listChargingPoints();
     }
 
-    // POST /driver/charge-requests
+    // POST /driver/charge-requests/{cpUid}/driver/{driverId}
     @PostMapping("/charge-requests/{cpUid}/driver/{driverId}")
-    public String manualChargeRequest(@PathVariable String cpUid, @RequestParam String driverId) {
+    public String manualChargeRequest(@PathVariable String cpUid, @PathVariable String driverId) {
         // Build a startCharging request expected by central and send as an object
         try {
             Map<String, String> payload = Map.of(
@@ -63,10 +63,19 @@ public class DriverController {
         return svc.getSession(sessionId);
     }
 
-    // POST /driver/sessions/{sessionId}/stop
-    @PostMapping("/sessions/{sessionId}/stop")
-    public SessionDto stop(@PathVariable String sessionId) {
-        return svc.stopSession(sessionId);
+    // POST /driver/sessions/{cpUid}/stop
+    @PostMapping("/sessions/{cpUid}/stop")
+    public String unplug(@PathVariable String cpUid) {
+        try {
+            Map<String, String> payload = Map.of(
+                    "type", "unplug",
+                    "chargerId", cpUid);
+            kafkaProducerService.sendMessage("CP", payload);
+
+            return "Unplug instruction published to CP topic";
+        } catch (Exception e) {
+            return "Failed to publish unplug instruction: " + e.getMessage();
+        }
     }
 
     // POST /driver/simulations/start
