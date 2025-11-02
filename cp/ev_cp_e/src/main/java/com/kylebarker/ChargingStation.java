@@ -29,7 +29,7 @@ public class ChargingStation {
 
     // Single global public state variable shared by all sessions and other classes.
     // Made public and volatile so other threads/classes can read/write safely.
-    public static volatile String GLOBAL_STATE = "activated";
+    public static volatile String GLOBAL_STATE = "ACTIVATED";
 
     // Charger ID is now required to be supplied via configuration; no
     // auto-generation.
@@ -49,8 +49,8 @@ public class ChargingStation {
     public String getState(String chargerId) {
         ChargingSession session = activeSessionsByCharger.get(chargerId);
         if (session == null) {
-            // No active session — return GLOBAL_STATE if set, otherwise "activated"
-            return (GLOBAL_STATE != null && !GLOBAL_STATE.isBlank()) ? GLOBAL_STATE : "activated";
+            // No active session — return GLOBAL_STATE if set, otherwise "ACTIVATED"
+            return (GLOBAL_STATE != null && !GLOBAL_STATE.isBlank()) ? GLOBAL_STATE : "ACTIVATED";
         }
 
         String status = session.getStatus();
@@ -287,8 +287,8 @@ public class ChargingStation {
 
     public String resumeAll() {
         // activeSessionsByCharger.values().forEach(ChargingSession::resume);
-        GLOBAL_STATE = "ACTIVATED";
-        return "Station Activated.";
+        updateState(chargerId, "ACTIVATED");
+        return "Station ACTIVATED.";
     }
 
     // Send telemetry
@@ -326,14 +326,8 @@ public class ChargingStation {
 
     // Stop all active sessions and remove them.
     public String stopAll() {
-        List<ChargingSession> sessions = new ArrayList<>(activeSessionsByCharger.values());
-        for (ChargingSession s : sessions) {
-            s.end();
-            publishReceipt(s);
-        }
-        activeSessionsByCharger.clear();
-        activeSessionsById.clear();
-        return "All sessions stopped.";
+        updateState(chargerId, "STOPPED")
+        
     }
 
     // Build and publish a simple JSON receipt to the broker and record in the
