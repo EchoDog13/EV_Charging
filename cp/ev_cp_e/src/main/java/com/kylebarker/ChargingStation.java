@@ -326,8 +326,9 @@ public class ChargingStation {
 
     // Stop all active sessions and remove them.
     public String stopAll() {
-        updateState(chargerId, "STOPPED")
-        
+        updateState(chargerId, "STOPPED");
+        return "All sessions stopped.";
+
     }
 
     // Build and publish a simple JSON receipt to the broker and record in the
