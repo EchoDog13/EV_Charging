@@ -17,12 +17,54 @@ const CENTRAL_BASE =
   (hasProto ? CENTRAL_IP : `http://${CENTRAL_IP}`) +
   (CENTRAL_PORT ? `:${CENTRAL_PORT}` : "");
 
-const DRIVER_API_BASE = "100.74.162.58:7040"; // driver API host:port (may omit protocol)
-// Ensure DRIVER_API_BASE contains protocol for fetch; default to http:// when absent
-const driverHasProto = /^https?:\/\//i.test(DRIVER_API_BASE);
-const DRIVER_BASE = driverHasProto
-  ? DRIVER_API_BASE
-  : `http://${DRIVER_API_BASE}`;
+// DRIVER API base: derive from window.DRIVER_API / #driverApi input. Default kept for backwards compatibility.
+const DEFAULT_DRIVER_API = "100.74.162.58:7040";
+
+function normalizeDriverApi(value) {
+  if (!value) return null;
+  value = String(value).trim();
+  if (!value) return null;
+  // If value already contains protocol, use as-is. Otherwise assume http://
+  if (/^https?:\/\//i.test(value)) return value.replace(/\/$/, "");
+  return `http://${value.replace(/\/$/, "")}`;
+}
+
+// Read from window global first (server-side template can set this), then from the input field.
+function getDriverBase() {
+  // prefer explicit window global
+  if (typeof window !== "undefined" && window.DRIVER_API) {
+    const v = normalizeDriverApi(window.DRIVER_API);
+    if (v) return v;
+  }
+  // then prefer value in the UI input if present
+  const input =
+    document && document.getElementById && document.getElementById("driverApi");
+  if (input && input.value) {
+    const v = normalizeDriverApi(input.value);
+    if (v) return v;
+  }
+  // fallback to default
+  return normalizeDriverApi(DEFAULT_DRIVER_API);
+}
+
+// Allow runtime updates
+function setDriverApi(value) {
+  const norm =
+    normalizeDriverApi(value) || normalizeDriverApi(DEFAULT_DRIVER_API);
+  // store in window so other scripts can access if needed
+  if (typeof window !== "undefined") window.DRIVER_API = norm;
+  // update input value if present
+  const input =
+    document && document.getElementById && document.getElementById("driverApi");
+  if (input) input.value = value || "";
+  console.info("Driver API base set to", norm);
+  return norm;
+}
+
+// Expose getter for other functions
+function DRIVER_BASE() {
+  return getDriverBase();
+}
 
 const API = {
   // Central's CPS endpoint (absolute URL) — used by the front-end to list available CPs
@@ -95,7 +137,7 @@ function isHealthCheckMessage(text) {
 // Poll Driver's messages endpoint and show driver-relevant messages (exclude telemetry)
 async function pollDriverMessages() {
   try {
-    const res = await fetch(`${DRIVER_BASE}/driver/messages`);
+    const res = await fetch(`${DRIVER_BASE()}/driver/messages`);
     if (!res.ok) return;
     const list = await res.json();
     if (!Array.isArray(list)) return;
@@ -200,6 +242,20 @@ document.addEventListener("DOMContentLoaded", () => {
       const c = document.getElementById("messages");
       if (c) c.textContent = "No messages yet.";
     });
+  // wire driver API set button
+  const setBtn = document.getElementById("btnSetDriverApi");
+  if (setBtn) {
+    setBtn.addEventListener("click", () => {
+      const v = document.getElementById("driverApi")?.value;
+      const norm = setDriverApi(v);
+      appendDriverMessage(`Driver API set to ${norm}`);
+    });
+  }
+  // ensure input shows current window.DRIVER_API or default
+  try {
+    const input = document.getElementById("driverApi");
+    if (input) input.value = window.DRIVER_API || input.value || "";
+  } catch (e) {}
 });
 
 // Load CPs
@@ -305,10 +361,10 @@ async function stopSession() {
   if (cpUid) {
     // Send stop command to the DRIVER API (driver service) so the device controller
     // can act on the stop immediately: /driver/sessions/{cpUid}/stop
-    url = `${DRIVER_BASE}/driver/sessions/${cpUid}/stop`;
+    url = `${DRIVER_BASE()}/driver/sessions/${cpUid}/stop`;
   } else if (sessionId) {
     // fallback to driver-local endpoint using sessionId on the driver API host
-    url = `${DRIVER_BASE}/driver/sessions/${sessionId}/stop`;
+    url = `${DRIVER_BASE()}/driver/sessions/${sessionId}/stop`;
   } else {
     alert("Select a CP or enter a sessionId");
     return;
