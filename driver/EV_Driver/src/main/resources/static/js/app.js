@@ -104,17 +104,6 @@ async function checkRequest() {
   if (data.sessionId && $("#sessionId")) $("#sessionId").value = data.sessionId;
 }
 
-async function getSession() {
-  const id = $("#sessionId").value.trim();
-  if (!id) {
-    alert("Enter sessionId");
-    return;
-  }
-  const res = await fetch(API.session(id));
-  const data = await res.json();
-  if ($("#sessOut")) $("#sessOut").textContent = jfmt(data);
-}
-
 async function stopSession() {
   const id = $("#sessionId").value.trim();
   if (!id) {
