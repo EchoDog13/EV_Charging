@@ -105,7 +105,13 @@ public class ChargingSession {
 
     public void end() {
         updateEnergy(); // When a session ends, return the station to the default activated state
-        ChargingStation.GLOBAL_STATE = "activated";
+        // Only reset global state to ACTIVATED if the station isn't administratively
+        // stopped
+        String g = ChargingStation.GLOBAL_STATE;
+        if (g == null || g.isBlank() || "HOLD".equalsIgnoreCase(g) || "IN_PROGRESS".equalsIgnoreCase(g)
+                || "PAUSED".equalsIgnoreCase(g) || "COMPLETED".equalsIgnoreCase(g)) {
+            ChargingStation.GLOBAL_STATE = "ACTIVATED";
+        }
         System.out.println("Session " + sessionId + " completed. Energy: "
                 + String.format("%.3f", energyConsumed) + " kWh, Cost: $"
                 + String.format("%.2f", getTotalCost()));
