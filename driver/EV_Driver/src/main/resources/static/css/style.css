@@ -14,7 +14,7 @@ table{width:100%;border-collapse:collapse;margin-top:8px}
 th,td{padding:10px;border-bottom:1px solid #22314d}
 pre{margin:8px 0;background:#0f172a;border:1px solid #233;padding:10px;border-radius:12px;white-space:pre-wrap;word-break:break-word}
 .pill{padding:4px 8px;border-radius:999px;font-weight:600}
-.ACTIVATED{background:#1b4;color:#0b0}
+.ACTIVATED{background:#1b4;color:black}
 .DISCONNECTED{background:#445;color:#ccd}
 .STOPPED{background:#864;color:#feb}
 .FAULT{background:#833;color:#f88}
