@@ -24,8 +24,12 @@ public class ChargingStation {
     private final Deque<String> recentMessages = new ConcurrentLinkedDeque<>();
 
     private final String chargerId;
+
     private final KafkaSender kafkaSender;
-    private final EngineClient engineClient;
+
+    // Single global public state variable shared by all sessions and other classes.
+    // Made public and volatile so other threads/classes can read/write safely.
+    public static volatile String GLOBAL_STATE = "ACTIVATED";
 
     // Charger ID is now required to be supplied via configuration; no
     // auto-generation.
@@ -41,12 +45,14 @@ public class ChargingStation {
 
     // Return a simple state string for the given charger id.
     // Maps internal session statuses to friendly states expected by the UI / API.
+    // The global state is used when there is no active session for the charger.
     public String getState(String chargerId) {
         ChargingSession session = activeSessionsByCharger.get(chargerId);
         if (session == null) {
-            // No active session — treat as available/activated
-            return "activated";
+            // No active session — return GLOBAL_STATE if set, otherwise "ACTIVATED"
+            return (GLOBAL_STATE != null && !GLOBAL_STATE.isBlank()) ? GLOBAL_STATE : "ACTIVATED";
         }
+
         String status = session.getStatus();
         switch (status) {
             case "IN_PROGRESS":
@@ -71,8 +77,8 @@ public class ChargingStation {
         this.kafkaSender = kafkaSender;
 
         // Start the plain socket EngineClient (not managed by Spring)
+        // Keep a local reference so we can shut it down on JVM exit.
         EngineClient client = new EngineClient(this);
-        this.engineClient = client;
 
         // ensure we shutdown the engine client on JVM exit
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -136,12 +142,35 @@ public class ChargingStation {
 
     // Update local state of the charging point
     public String updateState(String chargerId, String state) {
-        // Example: just log for now
-        return "Updated charger " + chargerId + " state to " + state;
+        // Update the single global state variable
+        String newState = (state == null) ? "" : state.trim();
+        GLOBAL_STATE = newState;
+
+        // If entering STOPPED, end/unplug any active sessions and prevent new ones
+        if ("STOPPED".equalsIgnoreCase(newState)) {
+            // Copy active sessions to avoid concurrent modification while removing
+            java.util.List<ChargingSession> sessions = new java.util.ArrayList<>(activeSessionsByCharger.values());
+            for (ChargingSession s : sessions) {
+                try {
+                    // Use existing unplug flow to end session, publish receipt and remove mappings
+                    unplug(s.getChargerId());
+                } catch (Exception ex) {
+                    System.err.println("Failed to stop session " + s.getSessionId() + ": " + ex.getMessage());
+                }
+            }
+            addMessage("Charger " + chargerId + " entered STOPPED state; all sessions terminated and unplugged.");
+            return "Updated charger " + chargerId + " state to " + newState + ". All sessions stopped.";
+        }
+
+        return "Updated charger " + chargerId + " state to " + newState;
     }
 
     // Start session by chargerId
     public String startSession(String chargerId, String driverId) {
+        // Reject creating new sessions while the charger is stopped
+        if ("STOPPED".equalsIgnoreCase(GLOBAL_STATE)) {
+            return "Charger " + chargerId + " is stopped and not accepting sessions.";
+        }
         ChargingSession existing = activeSessionsByCharger.get(chargerId);
         if (existing != null) {
             if (existing.getStatus().equals("PAUSED")) {
@@ -154,11 +183,17 @@ public class ChargingStation {
         ChargingSession session = new ChargingSession(chargerId, driverId);
         activeSessionsByCharger.put(chargerId, session);
         activeSessionsById.put(session.getSessionId(), session);
+        // Ensure the global state reflects that a session is waiting for plug
+        GLOBAL_STATE = "HOLD";
         return "Created new session (waiting for plug): " + session.getSessionId();
     }
 
     // Start session by sessionId
     public String startSessionById(String sessionId) {
+        // Reject starting/resuming sessions while charger is stopped
+        if ("STOPPED".equalsIgnoreCase(GLOBAL_STATE)) {
+            return "Charger is stopped and will not start sessions.";
+        }
         ChargingSession session = activeSessionsById.get(sessionId);
         if (session == null)
             return "No session found with ID " + sessionId;
@@ -251,8 +286,9 @@ public class ChargingStation {
     }
 
     public String resumeAll() {
-        activeSessionsByCharger.values().forEach(ChargingSession::resume);
-        return "All sessions resumed.";
+        // activeSessionsByCharger.values().forEach(ChargingSession::resume);
+        updateState(chargerId, "ACTIVATED");
+        return "Station ACTIVATED.";
     }
 
     // Send telemetry
@@ -290,14 +326,9 @@ public class ChargingStation {
 
     // Stop all active sessions and remove them.
     public String stopAll() {
-        List<ChargingSession> sessions = new ArrayList<>(activeSessionsByCharger.values());
-        for (ChargingSession s : sessions) {
-            s.end();
-            publishReceipt(s);
-        }
-        activeSessionsByCharger.clear();
-        activeSessionsById.clear();
+        updateState(chargerId, "STOPPED");
         return "All sessions stopped.";
+
     }
 
     // Build and publish a simple JSON receipt to the broker and record in the
@@ -331,4 +362,10 @@ public class ChargingStation {
             return "";
         return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
+
+    public String centralResume(String cpUid) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'centralResume'");
+    }
+
 }

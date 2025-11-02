@@ -25,8 +25,8 @@ public class EngineClient {
 
     // defaults; can be overridden by env vars
     // Use the monitor host IP by default in this environment
-    private String masterHost = "192.168.100.30";
-    private int masterPort = 5050;
+    private String masterHost;
+    private int masterPort = Integer.parseInt(System.getenv("MONITOR_HOST_PORT")); // Need to change this
 
     private volatile Socket socket;
     private volatile PrintWriter writer;

@@ -51,7 +51,8 @@ function cpSetBase(v) {
     return s;
   }
 
-  const normalized = normalize(v);
+  /"function"\s*:\s*healthcheck/i.test(s) ||
+    s.toLowerCase().includes("healthcheck");
   CP_BASE = normalized || cpBuildBase();
   try {
     if (!normalized) localStorage.removeItem("cp_api_base");
@@ -187,6 +188,13 @@ function updateStatusBadge(state) {
 }
 
 function appendMessage(text) {
+  // Skip health-check messages that clutter the UI
+  try {
+    if (isHealthCheckMessage(text)) return;
+  } catch (e) {
+    // if detection fails, fall back to showing the message
+  }
+
   const container = q("#messages");
   if (!container) return;
   if (container.textContent === "No messages yet.") container.textContent = "";
@@ -196,6 +204,31 @@ function appendMessage(text) {
   container.prepend(el);
   while (container.children.length > maxMessages)
     container.removeChild(container.lastChild);
+}
+
+// Helper to detect health-check / actuator messages
+function isHealthCheckMessage(text) {
+  if (!text) return false;
+
+  let s = String(text).trim();
+
+  // Try to parse as JSON
+  try {
+    const obj = JSON.parse(s);
+    if (obj.function && obj.function.toLowerCase() === "healthcheck") {
+      return true;
+    }
+    if (obj.type && obj.type.toLowerCase() === "health") {
+      return true;
+    }
+  } catch (e) {
+    // Not JSON, fallback to simple text match
+    if (/\/actuator\/health\b|actuator\/health\b|health check\b/i.test(s)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 async function pollMessages() {

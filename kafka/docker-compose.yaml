@@ -2,18 +2,27 @@ services:
   kafka:
     image: apache/kafka:latest
     container_name: kafka
-    network_mode: "host"
     ports:
-      - "9092:9092"
+      # ✅ Bind ONLY to Tailscale IP (replace with your actual Tailscale IP)
+      - "100.83.66.30:9092:9092"
+      - "9093:9093"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://192.168.100.10:9092  # Use static IP
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+
+      # Listeners
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+
+      # ✅ Use your Tailscale IP for advertised listeners
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://100.83.66.30:9092
+
+      # Internal quorum
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+
+      # Broker configs
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@192.168.100.10:9093  # Use static IP
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
@@ -26,7 +35,7 @@ services:
       - "8080:8080"
     environment:
       - KAFKA_CLUSTERS_0_NAME=local
-      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=192.168.100.10:9092  # Use Kafka's static IP
-      - KAFKA_CLUSTERS_0_ZOOKEEPER=  # Empty for KRaft mode
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+      - KAFKA_CLUSTERS_0_ZOOKEEPER=
     depends_on:
       - kafka

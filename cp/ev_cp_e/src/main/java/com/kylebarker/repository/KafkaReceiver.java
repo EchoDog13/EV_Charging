@@ -2,203 +2,108 @@ package com.kylebarker.repository;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kylebarker.ChargingSession;
 import com.kylebarker.ChargingStation;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 @Service
+@EnableAsync
 public class KafkaReceiver {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
-
-    @Autowired
-    private ChargingStation station;
-
-    public KafkaReceiver(KafkaSender kafkaSender) {
-        this.kafkaSender = kafkaSender;
-    }
-
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final ChargingStation station;
     private final KafkaSender kafkaSender;
 
-    // Make the local charger ID configurable via application.properties or
-    // environment variable.
-    // Make the local charger ID required via application.properties or environment
-    // variable.
-    // Do NOT provide a default here so Spring will fail to start if the property is
-    // missing.
     @Value("${charger.id}")
     private String localChargerId;
 
-    @KafkaListener(topics = "CP", groupId = "ev_central_group")
-    public void listen(String message) {
-        System.out.println("Received message: " + message);
-        // Keep a local record for the UI to read
+    @Autowired
+    public KafkaReceiver(ChargingStation station, KafkaSender kafkaSender) {
+        this.station = station;
+        this.kafkaSender = kafkaSender;
+    }
+
+    /* ---------- Listener – off-load immediately ---------- */
+    @KafkaListener(topics = {"CP", "broadcast"}, groupId = "ev_central_group")
+    public void listen(String raw) {
+        processAsync(raw);
+    }
+
+    @Async("kafkaTaskExecutor")
+    public void processAsync(String raw) {
         try {
-            station.addMessage("RECV CP: " + message);
-        } catch (Exception ignored) {
-        }
-        try {
-            JsonNode json = objectMapper.readTree(message);
-            // Some producers (or accidental string-wrapping in Kafka messages) send
-            // the JSON as a quoted string, e.g. "{\"type\":\"stopAll\"}".
-            // In that case the root node is textual and we need to parse the inner
-            // content to obtain the actual object fields.
-            if (json.isTextual()) {
-                System.out.println("Received textual JSON wrapper; unwrapping inner JSON...");
-                json = objectMapper.readTree(json.asText());
+            JsonNode json = parse(raw);
+            String type = json.path("type").asText("unknown");
+
+            station.addMessage("RECV: " + raw);
+
+            // ---- GLOBAL COMMANDS (no chargerId required) ----
+            if (List.of("stopAll", "pauseAll", "resumeAll").contains(type)) {
+                handleGlobal(type);
+                return;
             }
-            String type = json.path("type").asText("default");
-            // Do NOT default missing chargerId to the local charger. If absent, treat as
-            // null and
-            // ignore (for non-global messages). This prevents accidental creation of
-            // sessions on
-            // the local charger when the incoming message omitted the field.
-            // Accept either "chargerId" or the driver/central field name "cpUid" so
-            // external producers that use cpUid still work.
-            String chargerId = null;
-            if (json.has("chargerId")) {
-                chargerId = json.get("chargerId").asText(null);
-            } else if (json.has("cpUid")) {
-                chargerId = json.get("cpUid").asText(null);
+
+            // ---- LOCAL COMMANDS ----
+            String chargerId = json.has("chargerId") ? json.get("chargerId").asText()
+                             : json.has("cpUid") ? json.get("cpUid").asText() : null;
+
+            if (chargerId == null || !chargerId.equals(localChargerId)) {
+                return;   // not for us
             }
+
             String driverId = json.path("driverId").asText("unknown");
-
-            // global pause/resume messages have no charger ID, so skip check
-            if (!type.equals("stopAll") && !type.equals("startAll")) {
-                if (chargerId == null) {
-                    System.out.println("Ignoring message without chargerId for type '" + type + "'");
-                    return;
-                }
-                if (!chargerId.equals(localChargerId)) {
-                    System.out
-                            .println("Ignoring message for charger " + chargerId + " (this is " + localChargerId + ")");
-                    return;
-                }
-            }
-
-            switch (type) {
-                case "startCharging" -> handleStartCharging(driverId);
-                case "stopCharging" -> handleStopCharging();
-                case "plugIn" -> handlePlugIn();
-                case "unplug" -> handleUnplug();
-                case "pause" -> handlePause();
-                case "resume" -> handleResume();
-                case "stopAll" -> handleStopAll();
-                case "pauseAll" -> pauseAllSessions();
-                case "resumeAll" -> resumeAllSessions();
-                case "status" -> printStatus();
-                default -> System.out.println("Unknown message type: " + type);
-            }
+            handleLocal(type, driverId, json);
 
         } catch (Exception e) {
-            System.err.println("Failed to process message: " + e.getMessage());
+            station.addMessage("ERROR: " + e.getMessage());
         }
     }
 
-    // === INDIVIDUAL CHARGER CONTROLS ===
-
-    private void handleStartCharging(String driverId) {
-
-        String messageString;
-        // Delegate session creation to the shared ChargingStation so the REST
-        // status endpoints reflect the same sessions.
-        String startResult = station.startSession(localChargerId, driverId);
-        // startResult contains the session id if created. We intentionally DO NOT
-        // auto-plug the session here. The session should remain in HOLD until a
-        // physical plug-in action is performed via the CP UI (which will publish
-        // a plugIn message to the 'CP' topic). This ensures charging only starts
-        // once the vehicle is physically connected.
-        messageString = "🟢 New charging session created (HOLD awaiting plug): " + startResult;
-        station.addMessage(messageString);
+    private JsonNode parse(String msg) throws Exception {
+        JsonNode node = mapper.readTree(msg);
+        if (node.isTextual()) node = mapper.readTree(node.asText());
+        return node;
     }
 
-    private void handleStopCharging() {
-        station.addMessage("INSTRUCT stopSession: " + localChargerId);
-        station.stopSession(localChargerId);
+    private void handleLocal(String type, String driverId, JsonNode json) {
+        switch (type) {
+            case "startCharging" -> station.startSession(localChargerId, driverId);
+            case "stopCharging" -> station.stopSession(localChargerId);
+            case "plugIn" -> station.plugIn(localChargerId);
+            case "unplug" -> station.unplug(localChargerId);
+            case "pause" -> station.pause(localChargerId);
+            case "resume" -> station.resume(localChargerId);
+            case "state_change" -> station.updateState(localChargerId, json.path("state").asText());
+            default -> station.addMessage("Unknown local type: " + type);
+        }
     }
 
-    private void handlePlugIn() {
-        station.addMessage("INSTRUCT plugIn: " + localChargerId);
-        station.plugIn(localChargerId);
+    private void handleGlobal(String type) {
+        switch (type) {
+            case "stopAll" -> station.stopAll();
+            case "pauseAll" -> station.pauseAll();
+            case "resumeAll" -> station.resumeAll();
+        }
     }
 
-    private void handleUnplug() {
-        station.addMessage("INSTRUCT unplug: " + localChargerId);
-        station.unplug(localChargerId);
-    }
-
-    private void handlePause() {
-        station.addMessage("INSTRUCT pause: " + localChargerId);
-        station.pause(localChargerId);
-    }
-
-    private void handleResume() {
-        station.addMessage("INSTRUCT resume: " + localChargerId);
-        station.resume(localChargerId);
-    }
-
-    // === GLOBAL CONTROLS ===
-
-    private void pauseAllSessions() {
-        System.out.println("⏸ Pausing all sessions...");
-        station.pauseAll();
-    }
-
-    private void resumeAllSessions() {
-        System.out.println("▶️ Resuming all sessions...");
-        station.resumeAll();
-    }
-
-    private void handleStopAll() {
-        System.out.println(
-                "⏹ Stop all received: stopping all non-completed sessions (paused sessions will not be resumed)...");
-        station.stopAll();
-    }
-
-    private void printStatus() {
-        ChargingSession s = station.getActiveSession(localChargerId);
-        if (s != null)
-            System.out.println("ℹ️ " + s.getSessionInfo());
-    }
-
-    public String apiStartSession(String chargerId, String driverId) {
-        // Delegate to ChargingStation which enforces one session per charger
-        return station.startSession(chargerId, driverId);
-    }
-
-    public String apiStopSession(String chargerId) {
-        return station.stopSession(chargerId);
-    }
-
-    public String apiPlugIn(String chargerId) {
-        return station.plugIn(chargerId);
-    }
-
-    public String apiUnplug(String chargerId) {
-        return station.unplug(chargerId);
-    }
-
-    public String apiPause(String chargerId) {
-        return station.pause(chargerId);
-    }
-
-    public String apiResume(String chargerId) {
-        return station.resume(chargerId);
-    }
-
+    /* ---------- REST-style helpers (unchanged) ---------- */
+    public String apiStartSession(String chargerId, String driverId) { return station.startSession(chargerId, driverId); }
+    public String apiStopSession(String chargerId) { return station.stopSession(chargerId); }
+    public String apiPlugIn(String chargerId) { return station.plugIn(chargerId); }
+    public String apiUnplug(String chargerId) { return station.unplug(chargerId); }
+    public String apiPause(String chargerId) { return station.pause(chargerId); }
+    public String apiResume(String chargerId) { return station.resume(chargerId); }
     public String apiStatus(String chargerId) {
-        ChargingSession session = station.getActiveSession(chargerId);
-        if (session == null)
-            return "ℹ️ Charger " + chargerId + " idle.";
-        return String.format(
-                "⚡ Charger %s — Status: %s | Energy: %.3f kWh | Cost: $%.2f | Connected: %b",
-                chargerId, session.getStatus(), session.getEnergyConsumed(),
-                session.getTotalCost(), session.isChargerConnected());
+        var s = station.getActiveSession(chargerId);
+        if (s == null) return "Charger " + chargerId + " idle.";
+        return String.format("Charger %s — %s | %.3f kWh | $%.2f | %s",
+                chargerId, s.getStatus(), s.getEnergyConsumed(),
+                s.getTotalCost(), s.isChargerConnected());
     }
-
-    // --- end ---
 }

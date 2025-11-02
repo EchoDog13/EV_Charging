@@ -48,7 +48,7 @@ public class EV_CP_M implements Runnable {
 
     // @Option(names = { "-l", "--location" }, description = "Charging point
     // location")
-    String cpLocation;
+    String cpLocation = System.getenv().getOrDefault("CHARGER_LOCATION", "Unknown Location");
 
     private volatile Socket centralSocket = null;
     private volatile BufferedReader in = null;
@@ -360,7 +360,7 @@ public class EV_CP_M implements Runnable {
                     long now = System.currentTimeMillis();
                     if (last > 0 && (now - last) > engineHealthTimeoutMs) {
                         if (engineSeenConnected && !"DISCONNECTED".equals(state)) {
-                            state = "DISCONNECTED";
+                            state = "OUT_OF_ORDER";
                             System.out.println("Engine health timeout: marking CP state as DISCONNECTED");
                         }
                     }
