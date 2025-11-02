@@ -286,8 +286,9 @@ public class ChargingStation {
     }
 
     public String resumeAll() {
-        activeSessionsByCharger.values().forEach(ChargingSession::resume);
-        return "All sessions resumed.";
+        // activeSessionsByCharger.values().forEach(ChargingSession::resume);
+        GLOBAL_STATE = "ACTIVATED";
+        return "Station Activated.";
     }
 
     // Send telemetry

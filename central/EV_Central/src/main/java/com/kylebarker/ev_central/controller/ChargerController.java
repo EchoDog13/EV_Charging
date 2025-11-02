@@ -187,9 +187,9 @@ public class ChargerController {
     @PostMapping("/cps/commands/start-all")
     public ResponseEntity<String> startAllChargers() {
         JSONObject msg = new JSONObject();
-        msg.put("type", "startAll");
-        kafkaSender.send("CP", msg.toString());
-        messages.put(UUID.randomUUID().toString(), msg);
+        msg.put("type", "resumeAll");
+        kafkaSender.send("broadcast", msg.toString());
+        messages.put("Resumed all connected Charging Points", msg);
         return ResponseEntity.ok("Start all command sent");
     }
 
@@ -364,26 +364,27 @@ public class ChargerController {
     }
 
     // Resume all charging points (set all to ACTIVATED)
-    @PostMapping("/cps/commands/resume-all")
-    public ResponseEntity<String> resumeAllChargers() {
-        List<Charger> all = repository.findAll();
-        for (Charger c : all) {
-            try {
-                c.setState(chargerState.ACTIVATED);
-                repository.save(c);
-                JSONObject m = new JSONObject();
-                m.put("type", "state_change");
-                m.put("uid", c.getUid());
-                m.put("state", chargerState.ACTIVATED.name());
-                messages.put(UUID.randomUUID().toString(), m);
-                kafkaSender.send("CP", m.toString());
-            } catch (Exception ex) {
-            }
-        }
-        JSONObject cmd = new JSONObject();
-        cmd.put("type", "startAll");
-        kafkaSender.send("CP", cmd.toString());
-        messages.put(UUID.randomUUID().toString(), cmd);
-        return ResponseEntity.ok("Resume all command sent and persisted");
-    }
+    // @PostMapping("/cps/commands/resume-all")
+    // public ResponseEntity<String> resumeAllChargers() {
+    // List<Charger> all = repository.findAll();
+    // for (Charger c : all) {
+    // try {
+    // c.setState(chargerState.ACTIVATED);
+    // repository.save(c);
+    // JSONObject m = new JSONObject();
+    // m.put("type", "state_change");
+    // m.put("uid", c.getUid());
+    // m.put("state", chargerState.ACTIVATED.name());
+    // messages.put(UUID.randomUUID().toString(), m);
+    // kafkaSender.send("CP", m.toString());
+    // } catch (Exception ex) {
+    // }
+    // }
+    // JSONObject cmd = new JSONObject();
+    // cmd.put("type", "startAll");
+    // kafkaSender.send("CP", cmd.toString());
+    // messages.put(UUID.randomUUID().toString(), cmd);
+    // return ResponseEntity.ok("Resume all command sent and persisted");
+    // }
+
 }
