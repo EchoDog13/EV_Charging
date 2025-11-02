@@ -7,8 +7,10 @@ services:
       dockerfile: dockerfile
     container_name: ev-driver
     ports:
-      - "7040:8080"
+      - "100.83.66.30:7040:8080"
     image: ev_driver:latest
     restart: unless-stopped
     environment:
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=100.83.66.30:9092
+      - CENTRAL_IP=100.83.66.30
+      - CENTRAL_PORT=9900

@@ -1,5 +1,6 @@
 package com.kylebarker.ev_driver;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kylebarker.ev_driver.model.*;
 import com.kylebarker.ev_driver.service.DriverService;
 import com.kylebarker.ev_driver.service.KafkaProducerService;
@@ -7,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/driver")
@@ -29,19 +31,24 @@ public class DriverController {
     }
 
     // POST /driver/charge-requests
-    @PostMapping("/charge-requests")
-    public ResponseEntity<ChargeRequestCreatedDto> create(@RequestBody CreateChargeRequestDto body) {
-        // create the charge request via service
-        ChargeRequestCreatedDto created = svc.createChargeRequest(body);
-
-        // build JSON payload expected by central system / Kafka consumer
-        String payload = String.format("{\"cpUid\":\"%d\",\"type\":\"startCharging\",\"driverId\":\"%d\"}",
-                body.getCpUid(), body.getDriverId());
-
-        // send to Kafka topic
-        kafkaProducerService.sendMessage("charge_requests", payload);
-
-        return ResponseEntity.ok(created);
+    @PostMapping("/charge-requests/{cpUid}/driver/{driverId}")
+    public String manualChargeRequest(@PathVariable String cpUid, @RequestParam String driverId) {
+        // Build a startCharging request expected by central and send as an object
+        try {
+            Map<String, String> payload = Map.of(
+                    "type", "startCharging",
+                    "cpUid", cpUid,
+                    "driverId", driverId);
+            // Send the payload as an object so the Kafka JSON serializer writes
+            // a JSON object rather than a quoted string.
+            kafkaProducerService.sendMessage("charge_requests", payload);
+            // Serialize for UI/logging
+            ObjectMapper mapper = new ObjectMapper();
+            String msg = mapper.writeValueAsString(payload);
+            return "Charge request published: " + msg;
+        } catch (Exception e) {
+            return "Failed to publish charge request: " + e.getMessage();
+        }
     }
 
     // GET /driver/charge-requests/{requestId}

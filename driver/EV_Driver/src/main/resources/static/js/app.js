@@ -5,14 +5,22 @@ const tbody = $("#tbl tbody");
 // by default. If your Central server runs on a different host/port, update CENTRAL_BASE
 // accordingly (see notes below).
 // Default CENTRAL_BASE: http://localhost:5500 (change if central is on a different host)
-const CENTRAL_BASE = (
-  window.CENTRAL_BASE || "http://192.168.100.100:9900"
-).replace(/\/$/, "");
+// In the browser we don't have process.env. Allow server/template to set
+// window.CENTRAL_IP / window.CENTRAL_PORT, otherwise fall back to localhost.
+const CENTRAL_IP =
+  (typeof window !== "undefined" && window.CENTRAL_IP) || "http://100.83.66.30";
+const CENTRAL_PORT =
+  (typeof window !== "undefined" && window.CENTRAL_PORT) || "9900";
+// Ensure CENTRAL_IP already contains protocol; if not, default to http://
+const hasProto = /^https?:\/\//i.test(CENTRAL_IP);
+const CENTRAL_BASE =
+  (hasProto ? CENTRAL_IP : `http://${CENTRAL_IP}`) +
+  (CENTRAL_PORT ? `:${CENTRAL_PORT}` : "");
 
 const API = {
   // Central's CPS endpoint (absolute URL) — used by the front-end to list available CPs
   cps: `${CENTRAL_BASE}/central/cps`,
-  req: "/driver/charge-requests",
+  req: "/driver/charge-requests/${cpUid}/driver/${driverId}",
   reqStatus: (id) => `/driver/charge-requests/${id}`,
   session: (id) => `/driver/sessions/${id}`,
   stop: (id) => `/driver/sessions/${id}/stop`,
@@ -35,8 +43,12 @@ function jfmt(o) {
 async function loadCPs() {
   const res = await fetch(API.cps);
   const data = await res.json();
+  // Only show charging points that are activated
+  const active = Array.isArray(data)
+    ? data.filter((c) => (c.state || "").toLowerCase() === "activated")
+    : [];
   if (tbody) {
-    tbody.innerHTML = data
+    tbody.innerHTML = active
       .map(
         (c) => `
       <tr>
@@ -52,7 +64,7 @@ async function loadCPs() {
   }
   const sel = $("#cpSelect");
   if (sel) {
-    sel.innerHTML = data
+    sel.innerHTML = active
       .map(
         (c) =>
           `<option value="${c.uid}">${c.uid} — ${
