@@ -23,3 +23,8 @@ pre{margin:8px 0;background:#0f172a;border:1px solid #233;padding:10px;border-ra
 #telemetry-panel{background:transparent;margin-top:8px}
 #telemetry-panel h3{margin:6px 0 8px;font-size:1rem}
 #telemetry-panel div{margin:4px 0}
+
+/* Messages panel (same look-and-feel as CP UI) */
+.messages{max-height:260px;overflow:auto;border:1px solid #233;padding:8px;border-radius:8px;background:#071022}
+.message{padding:6px 8px;border-bottom:1px dashed #123;color:#cfe}
+.message:last-child{border-bottom:none}

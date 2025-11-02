@@ -97,6 +97,12 @@ public class DriverController {
         return svc.getTicket(sessionId);
     }
 
+    // GET /driver/messages
+    @GetMapping("/messages")
+    public List<String> listMessages() {
+        return svc.getMessages();
+    }
+
     // ------------------- TEST KAFKA CONNECTION -------------------
 
     // POST /driver/test-kafka?msg=hello

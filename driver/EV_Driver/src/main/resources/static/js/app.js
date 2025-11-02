@@ -48,6 +48,160 @@ function jfmt(o) {
   return JSON.stringify(o, null, 2);
 }
 
+// Track displayed messages to avoid duplicates
+const displayedMessages = new Set();
+
+// Messages UI helpers (show recent kafka messages from Central relevant to this driver)
+const maxMessages = 50;
+function appendDriverMessage(text) {
+  try {
+    const container = document.getElementById("messages");
+    if (!container) return;
+    if (container.textContent === "No messages yet.")
+      container.textContent = "";
+    const el = document.createElement("div");
+    el.className = "message";
+    el.textContent = new Date().toLocaleTimeString() + " — " + text;
+    container.prepend(el);
+    while (container.children.length > maxMessages)
+      container.removeChild(container.lastChild);
+  } catch (e) {
+    console.warn("appendDriverMessage failed", e);
+  }
+}
+
+function isHealthCheckMessage(text) {
+  if (!text) return false;
+  const s = String(text).trim();
+  // try JSON parse to inspect type
+  try {
+    const j = JSON.parse(s);
+    if (j && typeof j === "object") {
+      const t = j.type || j.function || j.msgType || j.messageType;
+      if (t && String(t).toLowerCase().includes("health")) return true;
+    }
+  } catch (e) {
+    // not JSON — treat short actuator-style messages as health checks
+    const lower = s.toLowerCase();
+    return (
+      lower.includes("health") ||
+      lower.includes("up") ||
+      lower.includes("actuator")
+    );
+  }
+  return false;
+}
+
+// Poll Driver's messages endpoint and show driver-relevant messages (exclude telemetry)
+async function pollDriverMessages() {
+  try {
+    const res = await fetch(`${DRIVER_BASE}/driver/messages`);
+    if (!res.ok) return;
+    const list = await res.json();
+    if (!Array.isArray(list)) return;
+
+    // driverId from page input
+    const pageDriverId = String(
+      document.getElementById("driverId")?.value || ""
+    );
+
+    for (const m of list) {
+      try {
+        // Accept either object or string
+        let msg = m;
+        if (typeof msg === "string") {
+          // try parse
+          try {
+            msg = JSON.parse(msg);
+          } catch (e) {
+            // leave as string
+          }
+        }
+
+        // If message looks like telemetry, skip it
+        const t = (msg && msg.type) || "";
+        if (
+          String(t).toLowerCase().includes("telemetry") ||
+          String(t).toLowerCase().includes("cp_telemetry")
+        )
+          continue;
+
+        // Some Kafka messages are sent with a short prefix like: "sts: {\"cpUid\":\"1000\",\"driverId\":\"9001\",\"type\":\"startCharging\"}"
+        // Detect simple prefixes (e.g. sts:, sts= or similar) and try to extract JSON payload
+        if (typeof m === "string") {
+          const s = m.trim();
+          // match prefix like `word:` or `word=` followed by JSON
+          const prefMatch = s.match(/^[a-zA-Z0-9_\-]+\s*[:=]\s*(\{[\s\S]*\})$/);
+          if (prefMatch && prefMatch[1]) {
+            try {
+              const parsed = JSON.parse(prefMatch[1]);
+              msg = parsed;
+            } catch (e) {
+              // if parse fails, leave as original string
+            }
+          }
+        }
+
+        // If message contains driverId and doesn't match our driver, skip
+        if (msg && (msg.driverId != null || msg.driverid != null)) {
+          const mid = String(msg.driverId ?? msg.driverid ?? "");
+          if (pageDriverId && mid !== pageDriverId) continue;
+        }
+
+        // Convert message to pretty string (pretty-print JSON where possible)
+        let pretty = "";
+        try {
+          if (typeof m === "string") {
+            pretty = m;
+            // if looks like JSON, pretty print
+            try {
+              const pm = JSON.parse(m);
+              pretty = JSON.stringify(pm, null, 2);
+            } catch (e) {
+              // not JSON, keep as-is
+            }
+          } else if (m && typeof m === "object") {
+            pretty = JSON.stringify(m, null, 2);
+          } else {
+            pretty = String(m);
+          }
+        } catch (e) {
+          pretty = String(m || "(unprintable message)");
+        }
+
+        // Trim whitespace-only messages and show placeholder if empty
+        if (!pretty || !String(pretty).trim()) pretty = "(empty message)";
+
+        // Check if we have already displayed this message
+        if (displayedMessages.has(pretty)) continue;
+        // Mark message as displayed
+        displayedMessages.add(pretty);
+
+        if (!isHealthCheckMessage(pretty)) appendDriverMessage(pretty);
+      } catch (e) {
+        // ignore per-message failures
+      }
+    }
+  } catch (e) {
+    // ignore polling errors
+  }
+}
+
+// Start polling messages on an interval similar to CP UI
+let driverMsgInterval = null;
+if (!driverMsgInterval)
+  driverMsgInterval = setInterval(pollDriverMessages, 2000);
+
+// Wire clear button if present
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("btnClear");
+  if (btn)
+    btn.addEventListener("click", () => {
+      const c = document.getElementById("messages");
+      if (c) c.textContent = "No messages yet.";
+    });
+});
+
 // Load CPs
 async function loadCPs() {
   const res = await fetch(API.cps);
