@@ -4,8 +4,8 @@ import json
 from typing import List, Tuple
 
 # ================= CONFIGURATION =================
-DRIVER_IP = "http://localhost:8081"   # Driver API
-CP_IP     = "http://localhost:8082"   # CP API
+DRIVER_IP = "http://100.74.162.58:7040"   # Driver API
+CP_IP     = "http://100.83.66.30:9900"   # CP API
 
 # Simulation parameters
 CP_UID = "CP001"
