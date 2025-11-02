@@ -6,6 +6,8 @@ JAVA MUST BE COMPLIED ON EACH MACHINE BEFORE EACH RUN
 
 USE: ./mvnw clean package -DskipTests -e
 
+UA cloud wont allow complied versions to be uploaded due to file size limits.
+
 ---
 
 ## 📌 Scope
