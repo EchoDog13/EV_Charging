@@ -4,7 +4,7 @@
 const API_BASE =
   typeof window !== "undefined" && window.location && window.location.origin
     ? window.location.origin
-    : "http://192.168.100.100:9900";
+    : "http://100.83.66.30:9900";
 
 const tbody = document.querySelector("#tbl tbody");
 
@@ -190,7 +190,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
-fetch("http://100.74.162.58:9900/central/cps")
+fetch("http://100.83.66.30:9900/central/cps")
   .then((r) => r.json())
   .then((list) => {
     const priority = {
@@ -313,6 +313,7 @@ function ensureSse(uid) {
     });
     src.onerror = (err) => {
       console.warn("SSE connection error for", uid, err);
+
       // leave to browser to attempt reconnection
     };
     sseMap.set(uid, src);
