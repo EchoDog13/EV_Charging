@@ -19,7 +19,7 @@ services:
     build:
       context: ./EV_Driver
       dockerfile: dockerfile
-    container_name: ev-driver
+    container_name: ev-driver1
     ports:
       - "100.74.162.58:7041:8080"
     image: ev_driver:latest
