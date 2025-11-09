@@ -98,9 +98,14 @@ public class DriverController {
     }
 
     // GET /driver/messages
+    // Optional query param `driverId` can be provided to filter messages that
+    // contain a matching driverId
     @GetMapping("/messages")
-    public List<String> listMessages() {
-        return svc.getMessages();
+    public List<String> listMessages(@RequestParam(required = false) String driverId) {
+        if (driverId == null || driverId.isBlank()) {
+            return svc.getMessages();
+        }
+        return svc.getMessagesForDriver(driverId);
     }
 
     // ------------------- TEST KAFKA CONNECTION -------------------

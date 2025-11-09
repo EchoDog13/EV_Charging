@@ -137,15 +137,19 @@ function isHealthCheckMessage(text) {
 // Poll Driver's messages endpoint and show driver-relevant messages (exclude telemetry)
 async function pollDriverMessages() {
   try {
-    const res = await fetch(`${DRIVER_BASE()}/driver/messages`);
+    // include page driverId as optional query param so server can filter messages
+    const pageDriverId = String(
+      document.getElementById("driverId")?.value || ""
+    );
+    const url = pageDriverId
+      ? `${DRIVER_BASE()}/driver/messages?driverId=${encodeURIComponent(pageDriverId)}`
+      : `${DRIVER_BASE()}/driver/messages`;
+    const res = await fetch(url);
     if (!res.ok) return;
     const list = await res.json();
     if (!Array.isArray(list)) return;
 
-    // driverId from page input
-    const pageDriverId = String(
-      document.getElementById("driverId")?.value || ""
-    );
+    // pageDriverId already captured in request URL above
 
     for (const m of list) {
       try {

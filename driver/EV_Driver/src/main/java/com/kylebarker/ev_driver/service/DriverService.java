@@ -184,4 +184,70 @@ public class DriverService {
     public List<String> getMessages() {
         return new ArrayList<>(messages);
     }
+
+    /**
+     * Return messages that either do not contain a driverId, or contain a driverId matching
+     * the provided string. This performs a best-effort JSON parse to inspect driverId keys.
+     */
+    public List<String> getMessagesForDriver(String driverId) {
+        if (driverId == null) return getMessages();
+        String target = driverId.trim();
+        List<String> out = new ArrayList<>();
+        for (String m : messages) {
+            // try to parse as JSON and check for driverId/driverid
+            boolean matched = false;
+            try {
+                Object obj = mapper.readValue(m, Object.class);
+                if (obj instanceof Map) {
+                    Map<?, ?> map = (Map<?, ?>) obj;
+                    Object v = map.get("driverId");
+                    if (v == null) v = map.get("driverid");
+                    if (v != null) {
+                        String sval = String.valueOf(v);
+                        if (sval.equals(target)) matched = true;
+                        else matched = false;
+                    } else {
+                        // No driverId in payload -> include
+                        matched = true;
+                    }
+                } else {
+                    // parsed but not a map -> include
+                    matched = true;
+                }
+            } catch (Exception e) {
+                // Not JSON — perform a simple substring check for "driverId":
+                String lower = m.toLowerCase();
+                if (lower.contains("driverid") || lower.contains("driverid")) {
+                    // crude extraction of digits/word after driverId
+                    String found = extractDriverIdFromText(m);
+                    if (found != null) matched = found.equals(target);
+                    else matched = false;
+                } else {
+                    // no driverId present -> include
+                    matched = true;
+                }
+            }
+            if (matched) out.add(m);
+        }
+        return out;
+    }
+
+    // crude helper: find first sequence of digits following driverId or "driverId" key
+    private String extractDriverIdFromText(String text) {
+        if (text == null) return null;
+        try {
+            String lower = text.toLowerCase();
+            int idx = lower.indexOf("driverid");
+            if (idx < 0) return null;
+            // look for colon or = after key
+            int after = idx + "driverid".length();
+            // substring from after to maybe JSON or value
+            String sub = text.substring(after);
+            // find digits in substring
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+)").matcher(sub);
+            if (m.find()) return m.group(1);
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
 }
