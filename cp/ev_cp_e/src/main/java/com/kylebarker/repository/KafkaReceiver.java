@@ -30,7 +30,10 @@ public class KafkaReceiver {
     }
 
     /* ---------- Listener – off-load immediately ---------- */
-    @KafkaListener(topics = {"CP", "broadcast"}, groupId = "ev_central_group")
+    // Use a per-instance consumer group so every charger receives all messages.
+    // The group id is resolved from application properties (see
+    // application.properties).
+    @KafkaListener(topics = { "CP", "broadcast" }, groupId = "${spring.kafka.consumer.group-id}")
     public void listen(String raw) {
         processAsync(raw);
     }
@@ -51,10 +54,10 @@ public class KafkaReceiver {
 
             // ---- LOCAL COMMANDS ----
             String chargerId = json.has("chargerId") ? json.get("chargerId").asText()
-                             : json.has("cpUid") ? json.get("cpUid").asText() : null;
+                    : json.has("cpUid") ? json.get("cpUid").asText() : null;
 
             if (chargerId == null || !chargerId.equals(localChargerId)) {
-                return;   // not for us
+                return; // not for us
             }
 
             String driverId = json.path("driverId").asText("unknown");
@@ -67,7 +70,8 @@ public class KafkaReceiver {
 
     private JsonNode parse(String msg) throws Exception {
         JsonNode node = mapper.readTree(msg);
-        if (node.isTextual()) node = mapper.readTree(node.asText());
+        if (node.isTextual())
+            node = mapper.readTree(node.asText());
         return node;
     }
 
@@ -93,15 +97,34 @@ public class KafkaReceiver {
     }
 
     /* ---------- REST-style helpers (unchanged) ---------- */
-    public String apiStartSession(String chargerId, String driverId) { return station.startSession(chargerId, driverId); }
-    public String apiStopSession(String chargerId) { return station.stopSession(chargerId); }
-    public String apiPlugIn(String chargerId) { return station.plugIn(chargerId); }
-    public String apiUnplug(String chargerId) { return station.unplug(chargerId); }
-    public String apiPause(String chargerId) { return station.pause(chargerId); }
-    public String apiResume(String chargerId) { return station.resume(chargerId); }
+    public String apiStartSession(String chargerId, String driverId) {
+        return station.startSession(chargerId, driverId);
+    }
+
+    public String apiStopSession(String chargerId) {
+        return station.stopSession(chargerId);
+    }
+
+    public String apiPlugIn(String chargerId) {
+        return station.plugIn(chargerId);
+    }
+
+    public String apiUnplug(String chargerId) {
+        return station.unplug(chargerId);
+    }
+
+    public String apiPause(String chargerId) {
+        return station.pause(chargerId);
+    }
+
+    public String apiResume(String chargerId) {
+        return station.resume(chargerId);
+    }
+
     public String apiStatus(String chargerId) {
         var s = station.getActiveSession(chargerId);
-        if (s == null) return "Charger " + chargerId + " idle.";
+        if (s == null)
+            return "Charger " + chargerId + " idle.";
         return String.format("Charger %s — %s | %.3f kWh | $%.2f | %s",
                 chargerId, s.getStatus(), s.getEnergyConsumed(),
                 s.getTotalCost(), s.isChargerConnected());
