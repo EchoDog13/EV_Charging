@@ -12,7 +12,10 @@ public class KafkaConsumerService {
         this.driverService = driverService;
     }
 
-    @KafkaListener(topics = { "charge_requests", "charge_responses", "CP", "broadcast" }, groupId = "ev_group")
+    // Read consumer group id from Spring property so different container instances
+    // can be assigned distinct group ids via environment variables
+    @KafkaListener(topics = { "charge_requests", "charge_responses", "CP",
+            "broadcast" }, groupId = "${spring.kafka.consumer.group-id:ev_group}")
     public void listen(String message) {
         System.out.println("Received message: " + message);
         driverService.addMessage(message);
