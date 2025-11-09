@@ -142,7 +142,9 @@ async function pollDriverMessages() {
       document.getElementById("driverId")?.value || ""
     );
     const url = pageDriverId
-      ? `${DRIVER_BASE()}/driver/messages?driverId=${encodeURIComponent(pageDriverId)}`
+      ? `${DRIVER_BASE()}/driver/messages?driverId=${encodeURIComponent(
+          pageDriverId
+        )}`
       : `${DRIVER_BASE()}/driver/messages`;
     const res = await fetch(url);
     if (!res.ok) return;
