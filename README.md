@@ -2,10 +2,18 @@
 
 A simulation system for managing a network of electric vehicle (EV) charging stations. The project models a **Central Control Server**, **Charging Points (CPs)**, **Drivers**, and a **Kafka event broker** to demonstrate distributed systems design, real-time communication, and frontend/backend integration.
 
+JAVA MUST BE COMPLIED ON EACH MACHINE BEFORE EACH RUN
+
+USE: ./mvnw clean package -DskipTests -e
+
+UA cloud wont allow complied versions to be uploaded due to file size limits.
+
 ---
 
 ## 📌 Scope
+
 The system simulates:
+
 - A **Central Control Panel** for monitoring and managing EV charging stations.
 - **Charging Points (CPs)** that register with the central system and simulate charging sessions.
 - **Drivers** who request and manage charging sessions.
@@ -14,6 +22,7 @@ The system simulates:
 ---
 
 ## 🏗️ Architecture
+
 The system is composed of four main components, each running separately:
 
 1. **Central Server**
@@ -36,6 +45,7 @@ The system is composed of four main components, each running separately:
 ## 🎯 Features
 
 ### Central
+
 - Register and track CPs (new or previously registered)
 - Display CP info: UID, location, price, state (color-coded)
 - Authorize charge requests
@@ -43,16 +53,19 @@ The system is composed of four main components, each running separately:
 - Display system messages (registrations, state changes, etc.)
 
 ### Charging Points
+
 - **Monitor**: register with central, send health status, display state
 - **Engine**: simulate plug/unplug, start/stop charging, send telemetry
 
 ### Drivers
+
 - Request charging manually or via simulation (file-driven, 4s intervals)
 - View available CPs
 - Track charging status
 - Receive final billing ticket (CP UID, total, cost per kWh)
 
 ### Kafka
+
 - Event-driven communication between Central, CPs, and Drivers
 - Topics:
   - `cp.command` → Central → CP
@@ -66,6 +79,7 @@ The system is composed of four main components, each running separately:
 ## 🌐 API Endpoints
 
 ### Central Service
+
 - `GET /central/cps` → List all CPs
 - `GET /central/cps/{cpUid}` → CP details
 - `POST /central/cps/{cpUid}/state` → Change CP state
@@ -77,6 +91,7 @@ The system is composed of four main components, each running separately:
 - `GET /central/messages` → System messages
 
 ### Charging Point
+
 - `POST /cp/{cpUid}/state` → Update CP state
 - `POST /cp/{cpUid}/charge-requests` → Manual charge request
 - `POST /cp/{cpUid}/plug` → Plug in vehicle
@@ -86,6 +101,7 @@ The system is composed of four main components, each running separately:
 - `POST /cp/session/{cpUid}/stop` → Stop session
 
 ### Driver
+
 - `GET /driver/cps` → List available CPs
 - `POST /driver/charge-requests` → Request charging
 - `GET /driver/sessions/{sessionId}` → Session details
@@ -97,11 +113,13 @@ The system is composed of four main components, each running separately:
 ---
 
 ## 🔄 Real-Time Updates
+
 - **Server-Sent Events (SSE)** are used to push live updates (e.g., consumption data, session status) to the frontend without manual refresh.
 
 ---
 
 ## 🎨 Frontend
+
 - Implemented with **Spring Boot + REST API**
 - Basic CSS for layout and color-coded states:
   - Green → Available / Supplying
@@ -112,6 +130,7 @@ The system is composed of four main components, each running separately:
 ---
 
 ## 📦 Deployment
+
 - Minimum of **3 machines**:
   - PC1: Charging Points
   - PC2: Central + Kafka
@@ -121,24 +140,26 @@ The system is composed of four main components, each running separately:
 ---
 
 ## 📅 Timeline
-- **Week 1 (6/10/25):** Develop components  
-- **Week 2 (13/10/25):** Integrate + frontend development  
-- **Week 3 (20/10/25):** In-lab testing & troubleshooting  
-- **Week 4 (27/10/25):** Demonstration  
+
+- **Week 1 (6/10/25):** Develop components
+- **Week 2 (13/10/25):** Integrate + frontend development
+- **Week 3 (20/10/25):** In-lab testing & troubleshooting
+- **Week 4 (27/10/25):** Demonstration
 
 ---
 
 ## 👥 Team & Work Distribution
+
 - **Central**
-  - Backend & API: *Kyle*  
-  - Frontend: *Sufyan*
+  - Backend & API: _Kyle_
+  - Frontend: _Sufyan_
 - **Charging Points**
-  - Backend & API: *Kyle*  
-  - Frontend: *Sufyan*
+  - Backend & API: _Kyle_
+  - Frontend: _Sufyan_
 - **Driver**
-  - Backend & API: *Sufyan*  
-  - Frontend: *Sufyan*
-- **Final Implementation Guide:** Kyle & Sufyan  
+  - Backend & API: _Sufyan_
+  - Frontend: _Sufyan_
+- **Final Implementation Guide:** Kyle & Sufyan
 
 Collaboration via **GitHub**.
 
@@ -147,6 +168,7 @@ Collaboration via **GitHub**.
 ## 🚀 Getting Started
 
 ### Prerequisites
+
 - Java 17+
 - Maven
 - Docker & Docker Compose
@@ -154,6 +176,7 @@ Collaboration via **GitHub**.
 - Kafka
 
 ### Build & Run
+
 ```bash
 # Clone repo
 git clone https://github.com/<your-org>/EV_Charging.git
@@ -164,3 +187,4 @@ mvn clean install
 
 # Run with Docker Compose
 docker-compose up --build
+```

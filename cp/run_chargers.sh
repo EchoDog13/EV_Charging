@@ -38,8 +38,7 @@ for i in $(seq 1 $NUM_CHARGERS); do
     ENGINE_HOST_PORT=$((BASE_ENGINE_PORT + i - 1))
     CURRENT_CHARGER_ID=$((BASE_CHARGER_ID + i - 1))
     CHARGER_APP_NAME="$CURRENT_CHARGER_ID"
-    PROJECT_NAME="${i}"
-
+    PROJECT_NAME="cp$i"
 
     echo "--- Setting up Charger instance $i (Project: $PROJECT_NAME) ---"
     echo "  CHARGER_ID: $CURRENT_CHARGER_ID"
@@ -47,19 +46,17 @@ for i in $(seq 1 $NUM_CHARGERS); do
     echo "  Engine Port: $ENGINE_HOST_PORT:8080"
     echo "  Application Name: $CHARGER_APP_NAME"
 
-    # Export environment variables for Docker Compose
-    export CHARGER_ID=$CURRENT_CHARGER_ID
-    export CHARGER_APP_NAME=$CHARGER_APP_NAME
-    export MONITOR_HOST_PORT=$MONITOR_HOST_PORT
-    export ENGINE_HOST_PORT=$ENGINE_HOST_PORT
-    export CENTRAL_IP=$CENTRAL_IP
-    export CENTRAL_PORT=$CENTRAL_PORT
-    export KAFKA_BROKER=$KAFKA_BROKER
-    export MONITOR_HOST=$MONITOR_HOST
-    export ENGINE_HOST=$ENGINE_HOST
-    export CHARGER_LOCATION="University of Waikato $i"
-
-    # Start containers with docker-compose
+    # Start containers with docker-compose using inline environment variables
+    CHARGER_ID=$CURRENT_CHARGER_ID \
+    CHARGER_APP_NAME=$CHARGER_APP_NAME \
+    MONITOR_HOST_PORT=$MONITOR_HOST_PORT \
+    ENGINE_HOST_PORT=$ENGINE_HOST_PORT \
+    CENTRAL_IP=$CENTRAL_IP \
+    CENTRAL_PORT=$CENTRAL_PORT \
+    KAFKA_BROKER=$KAFKA_BROKER \
+    MONITOR_HOST=$MONITOR_HOST \
+    ENGINE_HOST=$ENGINE_HOST \
+    CHARGER_LOCATION="University of Waikato $i" \
     docker compose -p "$PROJECT_NAME" up -d --build --force-recreate
 
     if [ $? -eq 0 ]; then
@@ -73,4 +70,4 @@ for i in $(seq 1 $NUM_CHARGERS); do
 done
 
 echo "All $NUM_CHARGERS charger instances have been launched."
-echo "Check with 'docker ps' or 'docker-compose -p cp1 ps', 'docker-compose -p cp2 ps', etc."
+echo "Check with 'docker ps' or 'docker compose -p cp1 ps', 'docker compose -p cp2 ps', etc."

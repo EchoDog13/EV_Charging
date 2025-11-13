@@ -14,7 +14,11 @@
       <label>Driver ID</label>
       <input id="driverId" value="9001"/>
       <button id="btnLoadCps">Reload CPs</button>
-      <a class="link" href="/dashboard">Go to Dashboard</a>
+    </div>
+    <div class="row">
+      <label>Driver API (host:port or full url)</label>
+      <input id="driverApi" placeholder="http://host:port or host:port" style="flex:1" value="100.74.162.58:7040"/>
+      <button id="btnSetDriverApi">Set Driver API</button>
     </div>
     <div class="row">
       <label>Choose CP</label>
@@ -24,34 +28,28 @@
   </section>
 
   <section class="card">
-    <h2>Charge Requests</h2>
-    <div class="row">
-      <label>Request ID</label>
-      <input id="requestId" placeholder="auto after request"/>
-      <button id="btnCheckReq">Check Status</button>
+    <h2>Charging Session</h2>
+    <button id="btnStopSession">Stop Session</button>
+    
+    <!-- Telemetry panel: always visible and updated only when telemetry matches this driver's id -->
+    <div id="telemetry-panel" style="margin-top:12px;">
+      <h3>Telemetry</h3>
+      <div><strong>CP UID:</strong> <span id="t-cp">-</span></div>
+      <div><strong>Session:</strong> <span id="t-session">-</span></div>
+      <div><strong>Driver:</strong> <span id="t-driver">-</span></div>
+      <div><strong>Energy (kWh):</strong> <span id="t-energy">-</span></div>
+      <div><strong>Power (kW):</strong> <span id="t-power">-</span></div>
+      <div><strong>Cost (€):</strong> <span id="t-cost">-</span></div>
+      <div><strong>Last Telemetry:</strong> <span id="t-ts">-</span></div>
     </div>
-    <pre id="reqOut">—</pre>
   </section>
 
   <section class="card">
-    <h2>Sessions</h2>
+    <h2>Messages</h2>
+    <div id="messages" class="messages">No messages yet.</div>
     <div class="row">
-      <label>Session ID</label>
-      <input id="sessionId" placeholder="from request status"/>
-      <button id="btnGetSession">Get Session</button>
-      <button id="btnStopSession">Stop Session</button>
+      <button id="btnClear">Clear</button>
     </div>
-    <pre id="sessOut">—</pre>
-  </section>
-
-  <section class="card">
-    <h2>Ticket</h2>
-    <div class="row">
-      <label>Session ID</label>
-      <input id="ticketSessionId" placeholder="same as Session ID"/>
-      <button id="btnGetTicket">Get Ticket</button>
-    </div>
-    <pre id="ticketOut">—</pre>
   </section>
 
   <section class="card">

@@ -68,19 +68,8 @@ public class ChargerController {
                         } catch (Exception ignore) {
                         }
                     }
-                    // prefer explicit state from telemetry, otherwise treat telemetry
-                    // presence as SUPPLYING
-                    Object st = last.get("state");
-                    if (st != null) {
-                        try {
-                            c.setState(com.kylebarker.ev_central.model.chargerState
-                                    .valueOf(String.valueOf(st).toUpperCase()));
-                        } catch (IllegalArgumentException ignore) {
-                        }
-                    } else if (last.get("sessionId") != null || last.get("energy_kWh") != null
-                            || last.get("power_kW") != null) {
-                        c.setState(com.kylebarker.ev_central.model.chargerState.SUPPLYING);
-                    }
+                    // Do NOT modify the persisted DB state from telemetry. Only
+                    // enrich with lastHealthCheck to keep dashboard freshness.
                 }
             } catch (Exception ex) {
                 // ignore enrichment failures per device

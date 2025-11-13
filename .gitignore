@@ -51,3 +51,4 @@ Thumbs.db
 .mvn/wrapper/*
 !.mvn/wrapper/maven-wrapper.properties
 plan.txt
+Usage.txt

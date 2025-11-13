@@ -1,5 +1,6 @@
 package com.kylebarker.ev_driver;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kylebarker.ev_driver.model.*;
 import com.kylebarker.ev_driver.service.DriverService;
 import com.kylebarker.ev_driver.service.KafkaProducerService;
@@ -7,7 +8,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
+@CrossOrigin("*")
 @RestController
 @RequestMapping("/driver")
 public class DriverController {
@@ -28,20 +31,25 @@ public class DriverController {
         return svc.listChargingPoints();
     }
 
-    // POST /driver/charge-requests
-    @PostMapping("/charge-requests")
-    public ResponseEntity<ChargeRequestCreatedDto> create(@RequestBody CreateChargeRequestDto body) {
-        // create the charge request via service
-        ChargeRequestCreatedDto created = svc.createChargeRequest(body);
-
-        // build JSON payload expected by central system / Kafka consumer
-        String payload = String.format("{\"cpUid\":\"%d\",\"type\":\"startCharging\",\"driverId\":\"%d\"}",
-                body.getCpUid(), body.getDriverId());
-
-        // send to Kafka topic
-        kafkaProducerService.sendMessage("charge_requests", payload);
-
-        return ResponseEntity.ok(created);
+    // POST /driver/charge-requests/{cpUid}/driver/{driverId}
+    @PostMapping("/charge-requests/{cpUid}/driver/{driverId}")
+    public String manualChargeRequest(@PathVariable String cpUid, @PathVariable String driverId) {
+        // Build a startCharging request expected by central and send as an object
+        try {
+            Map<String, String> payload = Map.of(
+                    "type", "startCharging",
+                    "cpUid", cpUid,
+                    "driverId", driverId);
+            // Send the payload as an object so the Kafka JSON serializer writes
+            // a JSON object rather than a quoted string.
+            kafkaProducerService.sendMessage("charge_requests", payload);
+            // Serialize for UI/logging
+            ObjectMapper mapper = new ObjectMapper();
+            String msg = mapper.writeValueAsString(payload);
+            return "Charge request published: " + msg;
+        } catch (Exception e) {
+            return "Failed to publish charge request: " + e.getMessage();
+        }
     }
 
     // GET /driver/charge-requests/{requestId}
@@ -56,10 +64,19 @@ public class DriverController {
         return svc.getSession(sessionId);
     }
 
-    // POST /driver/sessions/{sessionId}/stop
-    @PostMapping("/sessions/{sessionId}/stop")
-    public SessionDto stop(@PathVariable String sessionId) {
-        return svc.stopSession(sessionId);
+    // POST /driver/sessions/{cpUid}/stop
+    @PostMapping("/sessions/{cpUid}/stop")
+    public String unplug(@PathVariable String cpUid) {
+        try {
+            Map<String, String> payload = Map.of(
+                    "type", "unplug",
+                    "cpUid", cpUid);
+            kafkaProducerService.sendMessage("CP", payload);
+
+            return "Unplug instruction published to CP topic";
+        } catch (Exception e) {
+            return "Failed to publish unplug instruction: " + e.getMessage();
+        }
     }
 
     // POST /driver/simulations/start
@@ -78,6 +95,17 @@ public class DriverController {
     @GetMapping("/tickets/{sessionId}")
     public TicketDto ticket(@PathVariable String sessionId) {
         return svc.getTicket(sessionId);
+    }
+
+    // GET /driver/messages
+    // Optional query param `driverId` can be provided to filter messages that
+    // contain a matching driverId
+    @GetMapping("/messages")
+    public List<String> listMessages(@RequestParam(required = false) String driverId) {
+        if (driverId == null || driverId.isBlank()) {
+            return svc.getMessages();
+        }
+        return svc.getMessagesForDriver(driverId);
     }
 
     // ------------------- TEST KAFKA CONNECTION -------------------
